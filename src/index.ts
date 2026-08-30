@@ -273,7 +273,7 @@ export async function startServer(): Promise<void> {
 }
 
 const publicMcpUrl = () => (process.env.MCP_PUBLIC_URL || "https://mcp.kmerhosting.com").replace(/\/+$/, "");
-const oauthBackendUrl = () => (process.env.KMERHOSTING_OAUTH_BACKEND_URL || "https://api.kmerhosting.com/functions/v1/dashboard-mcp-oauth").replace(/\/+$/, "");
+const oauthBackendUrl = () => (process.env.KMERHOSTING_OAUTH_BACKEND_URL || "").replace(/\/+$/, "");
 
 function bearerToken(request: Request) {
   return request.headers.get("authorization")?.match(/^Bearer\s+(kh_(?:live|oauth)_[A-Za-z0-9_-]+)$/i)?.[1] || null;
@@ -295,6 +295,8 @@ function jsonResponse(body: unknown, status = 200, extra: Record<string, string>
 }
 
 async function proxyOAuth(request: Request, path: string) {
+  const backend = oauthBackendUrl();
+  if (!backend) return jsonResponse({ error: "server_configuration_error", message: "OAuth backend is not configured." }, 503);
   const response = await fetch(`${oauthBackendUrl()}${path}`, {
     method: request.method,
     headers: {
