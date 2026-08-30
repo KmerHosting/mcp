@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { McpServer } from "@modelcontextprotocol/server";
-import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import {
   KmerHostingClient,
   KmerHostingError,
@@ -268,9 +268,7 @@ function createServer(api = clientFromEnvironment()): McpServer {
 }
 
 export async function startServer(): Promise<void> {
-  const server = createServer();
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  serveStdio(() => createServer(), { onerror: (error) => console.error(`MCP transport error: ${error.message}`) });
   console.error("KmerHosting MCP server running on stdio");
 }
 
