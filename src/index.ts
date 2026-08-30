@@ -6,7 +6,6 @@ import {
   KmerHostingClient,
   KmerHostingError,
   type ApiEnvelope,
-  type MutationOptions,
   type VpsAction,
 } from "@kmerhosting/sdk";
 import * as z from "zod/v4";
@@ -54,10 +53,6 @@ function clientFromEnvironment(): KmerHostingClient {
     apiKey,
     baseUrl: process.env.KMERHOSTING_API_URL,
   });
-}
-
-function mutationOptions(input: { idempotencyKey?: string }): MutationOptions {
-  return { idempotencyKey: input.idempotencyKey };
 }
 
 function resultText(result: ApiEnvelope): { content: [{ type: "text"; text: string }] } {
