@@ -312,6 +312,23 @@ async function proxyOAuth(request: Request, path: string) {
   return new Response(response.body, { status: response.status, headers });
 }
 
+async function oauthTokenActive(token: string) {
+  const backend = oauthBackendUrl();
+  if (!backend) return false;
+  try {
+    const response = await fetch(`${backend}/introspect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body: new URLSearchParams({ token }).toString(),
+    });
+    if (!response.ok) return false;
+    const payload = await response.json() as { active?: boolean };
+    return payload.active === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function startHttpServer(port: number): Promise<void> {
   const mcpHandler = createMcpHandler((context) => {
     const token = context.requestInfo ? bearerToken(context.requestInfo) : null;
@@ -336,7 +353,9 @@ export async function startHttpServer(port: number): Promise<void> {
       }
       if (["/oauth/register", "/oauth/token", "/oauth/revoke"].includes(url.pathname)) return proxyOAuth(request, url.pathname);
       if (url.pathname !== "/mcp") return jsonResponse({ error: "not_found", message: "Not found." }, 404);
-      if (!bearerToken(request)) return jsonResponse({ error: "invalid_token", message: "OAuth bearer token required." }, 401, { "WWW-Authenticate": oauthChallenge() });
+      const token = bearerToken(request);
+      if (!token) return jsonResponse({ error: "invalid_token", message: "OAuth bearer token required." }, 401, { "WWW-Authenticate": oauthChallenge() });
+      if (token.startsWith("kh_oauth_") && !(await oauthTokenActive(token))) return jsonResponse({ error: "invalid_token", message: "The OAuth access token is invalid, revoked, or expired." }, 401, { "WWW-Authenticate": oauthChallenge() });
       const response = await mcpHandler.fetch(request);
       response.headers.set("Access-Control-Expose-Headers", "MCP-Session-Id, WWW-Authenticate");
       return response;
