@@ -42,10 +42,12 @@ Set `KMERHOSTING_OAUTH_BACKEND_URL` in `/etc/kmerhosting-mcp.env` to the real Su
 https://YOUR_PROJECT.supabase.co/functions/v1/dashboard-mcp-oauth
 ```
 
-Issue the certificate before enabling the HTTPS server if it does not already exist:
+The certificate paths in the Nginx template must exist before \\`nginx -t\\`. If the certificate does not already exist, issue it first with your existing ACME method (for example, temporarily stop Nginx and use standalone mode):
 
 ```bash
-sudo certbot --nginx -d mcp.kmerhosting.com
+sudo systemctl stop nginx
+sudo certbot certonly --standalone -d mcp.kmerhosting.com
+sudo systemctl start nginx
 ```
 
 ## Smoke test
