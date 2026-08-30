@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { McpServer } from "@modelcontextprotocol/server";
+import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import {
   KmerHostingClient,
@@ -46,8 +46,8 @@ const idInput = (label: string) => z.object({
   id: z.string().min(1).describe(label),
 });
 
-function clientFromEnvironment(): KmerHostingClient {
-  const apiKey = process.env.KMERHOSTING_API_KEY;
+function clientFromEnvironment(accessToken?: string): KmerHostingClient {
+  const apiKey = accessToken || process.env.KMERHOSTING_API_KEY;
   if (!apiKey) throw new Error("KMERHOSTING_API_KEY is required.");
   return new KmerHostingClient({
     apiKey,
@@ -263,8 +263,84 @@ function createServer(api = clientFromEnvironment()): McpServer {
 }
 
 export async function startServer(): Promise<void> {
+  const port = Number(process.env.MCP_HTTP_PORT || 0);
+  if (port > 0) {
+    await startHttpServer(port);
+    return;
+  }
   serveStdio(() => createServer(), { onerror: (error) => console.error(`MCP transport error: ${error.message}`) });
   console.error("KmerHosting MCP server running on stdio");
+}
+
+const publicMcpUrl = () => (process.env.MCP_PUBLIC_URL || "https://mcp.kmerhosting.com").replace(/\/+$/, "");
+const oauthBackendUrl = () => (process.env.KMERHOSTING_OAUTH_BACKEND_URL || "https://api.kmerhosting.com/functions/v1/dashboard-mcp-oauth").replace(/\/+$/, "");
+
+function bearerToken(request: Request) {
+  return request.headers.get("authorization")?.match(/^Bearer\s+(kh_(?:live|oauth)_[A-Za-z0-9_-]+)$/i)?.[1] || null;
+}
+
+function oauthChallenge() {
+  return `Bearer resource_metadata="${publicMcpUrl()}/.well-known/oauth-protected-resource"`;
+}
+
+function jsonResponse(body: unknown, status = 200, extra: Record<string, string> = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...extra,
+    },
+  });
+}
+
+async function proxyOAuth(request: Request, path: string) {
+  const response = await fetch(`${oauthBackendUrl()}${path}`, {
+    method: request.method,
+    headers: {
+      "Content-Type": request.headers.get("content-type") || "application/json",
+      Accept: "application/json",
+    },
+    body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer(),
+  });
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", "no-store");
+  headers.set("Access-Control-Allow-Origin", "*");
+  headers.set("Access-Control-Allow-Headers", "content-type");
+  return new Response(response.body, { status: response.status, headers });
+}
+
+export async function startHttpServer(port: number): Promise<void> {
+  const mcpHandler = createMcpHandler((context) => {
+    const token = context.requestInfo ? bearerToken(context.requestInfo) : null;
+    if (!token) throw new Error("OAuth bearer token is required.");
+    return createServer(clientFromEnvironment(token));
+  }, { legacy: "stateless", onerror: (error) => console.error(`MCP HTTP error: ${error.message}`) });
+
+  Bun.serve({
+    hostname: process.env.MCP_HTTP_HOST || "127.0.0.1",
+    port,
+    fetch: async (request) => {
+      const url = new URL(request.url);
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Authorization, Content-Type, MCP-Protocol-Version, MCP-Session-Id", "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS", "Access-Control-Expose-Headers": "MCP-Session-Id, WWW-Authenticate" } });
+      }
+      if (url.pathname === "/health") return jsonResponse({ status: "ok", service: "kmerhosting-mcp", transport: "streamable-http" });
+      if (url.pathname === "/.well-known/oauth-protected-resource" || url.pathname === "/.well-known/oauth-protected-resource/mcp") {
+        return jsonResponse({ resource: `${publicMcpUrl()}/mcp`, authorization_servers: [publicMcpUrl()], scopes_supported: ["account:read", "services:read", "domains:read", "domains:write", "domains:dns:write", "email:read", "email:write", "hosting:read", "hosting:panel:access", "vps:read", "vps:write", "vps:snapshots:write"] });
+      }
+      if (url.pathname === "/.well-known/oauth-authorization-server") {
+        return jsonResponse({ issuer: publicMcpUrl(), authorization_endpoint: "https://dashboard.kmerhosting.com/oauth/authorize", token_endpoint: `${publicMcpUrl()}/oauth/token`, registration_endpoint: `${publicMcpUrl()}/oauth/register`, revocation_endpoint: `${publicMcpUrl()}/oauth/revoke`, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"], code_challenge_methods_supported: ["S256"], token_endpoint_auth_methods_supported: ["none"] });
+      }
+      if (["/oauth/register", "/oauth/token", "/oauth/revoke"].includes(url.pathname)) return proxyOAuth(request, url.pathname);
+      if (url.pathname !== "/mcp") return jsonResponse({ error: "not_found", message: "Not found." }, 404);
+      if (!bearerToken(request)) return jsonResponse({ error: "invalid_token", message: "OAuth bearer token required." }, 401, { "WWW-Authenticate": oauthChallenge() });
+      const response = await mcpHandler.fetch(request);
+      response.headers.set("Access-Control-Expose-Headers", "MCP-Session-Id, WWW-Authenticate");
+      return response;
+    },
+  });
+  console.error(`KmerHosting MCP server listening on http://${process.env.MCP_HTTP_HOST || "127.0.0.1"}:${port}/mcp`);
 }
 
 if (import.meta.main) {
