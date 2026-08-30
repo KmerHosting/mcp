@@ -39,7 +39,20 @@ After publishing, configure a local MCP client to start the server:
 }
 ```
 
-The server uses stdio. Keep stdout reserved for MCP protocol messages; diagnostics are written to stderr.
+The server uses stdio by default. For the hosted deployment, set `MCP_HTTP_PORT` to serve Streamable HTTP at `/mcp`; each request uses its user-scoped OAuth bearer token.
+
+Hosted MCP endpoint: `https://mcp.kmerhosting.com/mcp`. It publishes OAuth 2.1 discovery and Dynamic Client Registration, then sends users to `https://dashboard.kmerhosting.com/oauth/authorize` for PKCE consent. No shared API key is required for hosted users.
+
+HTTP environment variables:
+
+```bash
+MCP_HTTP_PORT=8791
+MCP_HTTP_HOST=127.0.0.1
+MCP_PUBLIC_URL=https://mcp.kmerhosting.com
+KMERHOSTING_OAUTH_BACKEND_URL=https://api.kmerhosting.com/functions/v1/dashboard-mcp-oauth
+```
+
+Keep stdout reserved for MCP protocol messages in stdio mode; diagnostics are written to stderr.
 
 ## Tools
 
