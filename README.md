@@ -49,7 +49,7 @@ HTTP environment variables:
 MCP_HTTP_PORT=8791
 MCP_HTTP_HOST=127.0.0.1
 MCP_PUBLIC_URL=https://mcp.kmerhosting.com
-KMERHOSTING_OAUTH_BACKEND_URL=https://api.kmerhosting.com/functions/v1/dashboard-mcp-oauth
+KMERHOSTING_OAUTH_BACKEND_URL=https://YOUR_PROJECT.supabase.co/functions/v1/dashboard-mcp-oauth
 ```
 
 Keep stdout reserved for MCP protocol messages in stdio mode; diagnostics are written to stderr.
