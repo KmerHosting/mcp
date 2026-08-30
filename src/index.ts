@@ -307,6 +307,11 @@ async function proxyOAuth(request: Request, path: string) {
     body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer(),
   });
   const headers = new Headers(response.headers);
+  // Bun transparently decodes compressed upstream bodies; do not forward
+  // encoding/length metadata that would describe the compressed payload.
+  headers.delete("Content-Encoding");
+  headers.delete("Content-Length");
+  headers.delete("Transfer-Encoding");
   headers.set("Cache-Control", "no-store");
   headers.set("Access-Control-Allow-Origin", "*");
   headers.set("Access-Control-Allow-Headers", "content-type");
