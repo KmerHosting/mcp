@@ -297,7 +297,8 @@ function jsonResponse(body: unknown, status = 200, extra: Record<string, string>
 async function proxyOAuth(request: Request, path: string) {
   const backend = oauthBackendUrl();
   if (!backend) return jsonResponse({ error: "server_configuration_error", message: "OAuth backend is not configured." }, 503);
-  const response = await fetch(`${oauthBackendUrl()}${path}`, {
+  const backendPath = path.replace(/^\/oauth(?=\/|$)/, "");
+  const response = await fetch(`${oauthBackendUrl()}${backendPath}`, {
     method: request.method,
     headers: {
       "Content-Type": request.headers.get("content-type") || "application/json",
