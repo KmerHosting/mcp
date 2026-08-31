@@ -61,10 +61,25 @@ function resultText(result: ApiEnvelope): { content: [{ type: "text"; text: stri
 
 function errorText(error: unknown): { isError: true; content: [{ type: "text"; text: string }] } {
   if (error instanceof KmerHostingError) {
-    const request = error.requestId ? ` Request ID: ${error.requestId}.` : "";
-    return { isError: true, content: [{ type: "text", text: `KmerHosting API error (${error.code}, HTTP ${error.status}): ${error.message}.${request}` }] };
+    return {
+      isError: true,
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          error: {
+            code: error.code,
+            status: error.status,
+            message: error.message,
+            ...(error.requestId ? { request_id: error.requestId } : {}),
+          },
+        }, null, 2),
+      }],
+    };
   }
-  return { isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }] };
+  return {
+    isError: true,
+    content: [{ type: "text", text: JSON.stringify({ error: { code: "mcp_error", message: error instanceof Error ? error.message : String(error) } }, null, 2) }],
+  };
 }
 
 async function execute(work: () => Promise<ApiEnvelope>) {
@@ -75,7 +90,7 @@ async function execute(work: () => Promise<ApiEnvelope>) {
   }
 }
 
-function createServer(api = clientFromEnvironment()): McpServer {
+export function createServer(api = clientFromEnvironment()): McpServer {
   const server = new McpServer({ name: "kmerhosting", version: "0.2.0" });
 
   server.registerTool("kmerhosting_account_get", {
@@ -336,16 +351,23 @@ async function oauthTokenActive(token: string) {
 }
 
 export async function startHttpServer(port: number): Promise<void> {
+  const fetchHandler = createHttpHandler();
+  Bun.serve({
+    hostname: process.env.MCP_HTTP_HOST || "127.0.0.1",
+    port,
+    fetch: fetchHandler,
+  });
+  console.error(`KmerHosting MCP server listening on http://${process.env.MCP_HTTP_HOST || "127.0.0.1"}:${port}/mcp`);
+}
+
+export function createHttpHandler(): (request: Request) => Promise<Response> {
   const mcpHandler = createMcpHandler((context) => {
     const token = context.requestInfo ? bearerToken(context.requestInfo) : null;
     if (!token) throw new Error("OAuth bearer token is required.");
     return createServer(clientFromEnvironment(token));
   }, { legacy: "stateless", onerror: (error) => console.error(`MCP HTTP error: ${error.message}`) });
 
-  Bun.serve({
-    hostname: process.env.MCP_HTTP_HOST || "127.0.0.1",
-    port,
-    fetch: async (request) => {
+  return async (request) => {
       const url = new URL(request.url);
       if (request.method === "OPTIONS") {
         return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Authorization, Content-Type, MCP-Protocol-Version, MCP-Session-Id", "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS", "Access-Control-Expose-Headers": "MCP-Session-Id, WWW-Authenticate" } });
@@ -365,9 +387,7 @@ export async function startHttpServer(port: number): Promise<void> {
       const response = await mcpHandler.fetch(request);
       response.headers.set("Access-Control-Expose-Headers", "MCP-Session-Id, WWW-Authenticate");
       return response;
-    },
-  });
-  console.error(`KmerHosting MCP server listening on http://${process.env.MCP_HTTP_HOST || "127.0.0.1"}:${port}/mcp`);
+    };
 }
 
 if (import.meta.main) {

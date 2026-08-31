@@ -1,0 +1,48 @@
+name: KmerHosting integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      allow_sandbox_writes:
+        description: "Reserved for explicitly approved reversible sandbox writes"
+        required: true
+        default: false
+        type: boolean
+  schedule:
+    - cron: "17 2 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kmerhosting-integration
+  cancel-in-progress: true
+
+jobs:
+  remote-contract:
+    runs-on: ubuntu-24.04
+    env:
+      RUN_KMERHOSTING_INTEGRATION: "1"
+      KH_INTEGRATION_API_URL: ${{ vars.KH_INTEGRATION_API_URL || 'https://api.kmerhosting.com' }}
+      KH_INTEGRATION_MCP_URL: ${{ vars.KH_INTEGRATION_MCP_URL || 'https://mcp.kmerhosting.com/mcp' }}
+      KH_TEST_TOKEN_A: ${{ secrets.KH_TEST_TOKEN_A }}
+      KH_TEST_TOKEN_B: ${{ secrets.KH_TEST_TOKEN_B }}
+      KH_TEST_SERVICE_ID_A: ${{ secrets.KH_TEST_SERVICE_ID_A }}
+      KH_TEST_SERVICE_ID_B: ${{ secrets.KH_TEST_SERVICE_ID_B }}
+      KH_TEST_REVOKED_TOKEN: ${{ secrets.KH_TEST_REVOKED_TOKEN }}
+      KH_TEST_EXPIRED_TOKEN: ${{ secrets.KH_TEST_EXPIRED_TOKEN }}
+      KH_TEST_ALLOW_WRITES: ${{ inputs.allow_sandbox_writes == true && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - run: bun install --frozen-lockfile
+      - name: Require dedicated tenant credentials
+        shell: bash
+        run: |
+          test -n "$KH_TEST_TOKEN_A"
+          test -n "$KH_TEST_TOKEN_B"
+          test "$KH_TEST_TOKEN_A" != "$KH_TEST_TOKEN_B"
+      - name: Run remote tenant-isolation contract
+        run: bun test tests/integration.test.ts
