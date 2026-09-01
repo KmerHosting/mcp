@@ -83,7 +83,7 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
     expect(initialize.result.serverInfo).toMatchObject({ name: "kmerhosting", version: "0.2.0" });
 
     const listed = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }));
-    expect(listed.result.tools).toHaveLength(28);
+    expect(listed.result.tools).toHaveLength(31);
     expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toEqual([...MCP_TOOL_NAMES]);
 
     const toolResult = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "kmerhosting_account_get", arguments: {} } }));
@@ -95,6 +95,7 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
     apiErrorMode = false;
     const toolArguments: Record<string, Record<string, unknown>> = {
       kmerhosting_account_get: {},
+      kmerhosting_account_api_usage: {},
       kmerhosting_services_list: {},
       kmerhosting_service_get: { id: "service-1" },
       kmerhosting_domains_list: {},
@@ -113,6 +114,9 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
       kmerhosting_hosting_panel_access: { serviceId: "hosting-1", target: "panel" },
       kmerhosting_lxc_list: {},
       kmerhosting_lxc_get: { id: "lxc-1" },
+      kmerhosting_lxc_metrics: { id: "lxc-1" },
+      kmerhosting_lxc_action: { id: "lxc-1", action: "restart" },
+      kmerhosting_lxc_snapshots: { id: "lxc-1", action: "list" },
       kmerhosting_kvm_list: {},
       kmerhosting_kvm_get: { id: "vps-1" },
       kmerhosting_kvm_action: { serviceId: "vps-1", action: "restart" },

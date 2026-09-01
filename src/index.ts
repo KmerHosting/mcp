@@ -7,6 +7,7 @@ import {
   KmerHostingError,
   type ApiEnvelope,
   type KvmAction,
+  type MutationOptions,
 } from "@kmerhosting/sdk";
 import * as z from "zod/v4";
 
@@ -29,7 +30,7 @@ export const MCP_TOOL_NAMES = [
   "kmerhosting_hosting_services_list",
   "kmerhosting_hosting_stats",
   "kmerhosting_hosting_panel_access",
-  "kmerhosting_lxc_list", "kmerhosting_lxc_get",
+  "kmerhosting_lxc_list", "kmerhosting_lxc_get", "kmerhosting_lxc_metrics", "kmerhosting_lxc_action", "kmerhosting_lxc_snapshots",
   "kmerhosting_kvm_list", "kmerhosting_kvm_get", "kmerhosting_kvm_action", "kmerhosting_kvm_auto_renew",
   "kmerhosting_kvm_snapshots_list", "kmerhosting_kvm_snapshot_create", "kmerhosting_kvm_snapshot_update", "kmerhosting_kvm_snapshot_delete",
 ] as const;
@@ -49,6 +50,8 @@ export const MCP_SUPPORTED_SCOPES = [
   "hosting:read",
   "hosting:panel:access",
   "lxc:read",
+  "lxc:power:write",
+  "lxc:snapshots:write",
   "kvm:read",
   "kvm:power:write",
   "kvm:snapshots:write",
@@ -83,6 +86,23 @@ function clientFromEnvironment(accessToken?: string): KmerHostingClient {
       return payload as ApiEnvelope;
     };
   }
+  const lxc = client.lxc as typeof client.lxc & {
+    metrics?: (id: string) => Promise<ApiEnvelope>;
+    action?: (id: string, action: string, options?: MutationOptions) => Promise<ApiEnvelope>;
+    snapshots?: { list: (id: string) => Promise<ApiEnvelope>; mutate: (id: string, action: string, name: string, options?: MutationOptions) => Promise<ApiEnvelope> };
+  };
+  const legacyRequest = async (path: string, method = "GET", body?: unknown): Promise<ApiEnvelope> => {
+    const baseUrl = (process.env.KMERHOSTING_API_URL || "https://api.kmerhosting.com").replace(/\/+$/, "");
+    const headers: Record<string, string> = { Accept: "application/json", Authorization: `Bearer ${apiKey}` };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    const response = await fetch(`${baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error?.message || "Unable to complete the LXC request.");
+    return payload as ApiEnvelope;
+  };
+  if (!lxc.metrics) lxc.metrics = (id) => legacyRequest(`/v1/lxc/instances/${encodeURIComponent(id)}/metrics`);
+  if (!lxc.action) lxc.action = (id, action, options) => legacyRequest(`/v1/lxc/instances/${encodeURIComponent(id)}/actions`, "POST", { action, ...(options?.idempotencyKey ? {} : {}) });
+  if (!lxc.snapshots) lxc.snapshots = { list: (id) => legacyRequest(`/v1/lxc/instances/${encodeURIComponent(id)}/snapshots`), mutate: (id, action, name) => legacyRequest(`/v1/lxc/instances/${encodeURIComponent(id)}/snapshots`, "POST", { action, name }) };
   return client;
 }
 
@@ -253,6 +273,37 @@ export function createServer(api = clientFromEnvironment()): McpServer {
     description: "Get details for one owned LXC instance.",
     inputSchema: idInput("LXC instance UUID"),
   }, ({ id }) => execute(() => api.lxc.get(id)));
+
+  server.registerTool("kmerhosting_lxc_metrics", {
+    description: "Get metrics for an owned LXC instance for the last 24 hours.",
+    inputSchema: idInput("LXC instance UUID"),
+  }, ({ id }) => execute(() => {
+    const method = (api.lxc as typeof api.lxc & { metrics?: (id: string) => Promise<ApiEnvelope> }).metrics;
+    if (!method) throw new Error("Install the latest KmerHosting SDK before using LXC metrics.");
+    return method(id);
+  }));
+
+  server.registerTool("kmerhosting_lxc_action", {
+    description: "Control an owned LXC instance. This can interrupt services and requires explicit confirmation for stop.",
+    inputSchema: z.object({ id: z.string().min(1), action: z.enum(["start", "restart", "freeze", "stop"]), confirm: z.literal(true).optional(), ...mutationFields }),
+  }, ({ id, action, confirm, idempotencyKey }) => execute(() => {
+    if (["stop", "freeze"].includes(action) && confirm !== true) throw new Error("Set confirm=true to run this disruptive LXC action.");
+    const method = (api.lxc as typeof api.lxc & { action?: (id: string, action: "start" | "restart" | "freeze" | "stop", options?: MutationOptions) => Promise<ApiEnvelope> }).action;
+    if (!method) throw new Error("Install the latest KmerHosting SDK before using LXC actions.");
+    return method(id, action, { idempotencyKey });
+  }));
+
+  server.registerTool("kmerhosting_lxc_snapshots", {
+    description: "List or mutate an owned LXC snapshot. Delete and restore require confirm=true.",
+    inputSchema: z.object({ id: z.string().min(1), action: z.enum(["list", "create", "delete", "restore"]), name: z.string().min(1).max(48).optional(), confirm: z.literal(true).optional(), ...mutationFields }),
+  }, ({ id, action, name, confirm, idempotencyKey }) => execute(() => {
+    const snapshots = (api.lxc as typeof api.lxc & { snapshots?: { list: (id: string) => Promise<ApiEnvelope>; mutate: (id: string, action: "create" | "delete" | "restore", name: string, options?: MutationOptions) => Promise<ApiEnvelope> } }).snapshots;
+    if (!snapshots) throw new Error("Install the latest KmerHosting SDK before using LXC snapshots.");
+    if (action === "list") return snapshots.list(id);
+    if (!name) throw new Error("A snapshot name is required.");
+    if (["delete", "restore"].includes(action) && confirm !== true) throw new Error("Set confirm=true for snapshot deletion or restoration.");
+    return snapshots.mutate(id, action, name, { idempotencyKey });
+  }));
 
   server.registerTool("kmerhosting_kvm_list", {
     description: "List owned KmerHosting KVM instances.",
