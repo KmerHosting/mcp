@@ -1,6 +1,6 @@
 {
   "name": "@kmerhosting/mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Official Model Context Protocol server for the KmerHosting API.",
   "license": "Apache-2.0",
   "type": "module",
@@ -20,19 +20,16 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "prepare": "npm run build",
+    "prepare": "bun run build",
     "start": "bun dist/index.js"
   },
   "dependencies": {
-    "@kmerhosting/sdk": "^0.2.0",
+    "@kmerhosting/sdk": "^0.3.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/bun": "1.4.0",
     "typescript": "5.7.3"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

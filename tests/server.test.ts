@@ -68,7 +68,8 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
     });
 
     expect(protectedResourceBody.scopes_supported).toEqual([...MCP_SUPPORTED_SCOPES]);
-    expect(protectedResourceBody.scopes_supported).not.toContain("lxc:reinstall");
+    expect(protectedResourceBody.scopes_supported).toContain("lxc:reinstall");
+    expect(protectedResourceBody.scopes_supported).toContain("lxc:terminal:access");
 
     const unauthenticated = await handler(new Request("https://mcp.example.test/mcp", { method: "POST", body: "{}" }));
     expect(unauthenticated.status).toBe(401);
@@ -80,10 +81,10 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
       method: "initialize",
       params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "contract-test", version: "1.0.0" } },
     }));
-    expect(initialize.result.serverInfo).toMatchObject({ name: "kmerhosting", version: "0.2.0" });
+    expect(initialize.result.serverInfo).toMatchObject({ name: "kmerhosting", version: "0.3.0" });
 
     const listed = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }));
-    expect(listed.result.tools).toHaveLength(36);
+    expect(listed.result.tools).toHaveLength(41);
     expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toEqual([...MCP_TOOL_NAMES]);
 
     const toolResult = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "kmerhosting_account_get", arguments: {} } }));
@@ -117,6 +118,11 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
       kmerhosting_lxc_metrics: { id: "lxc-1" },
       kmerhosting_lxc_action: { id: "lxc-1", action: "restart" },
       kmerhosting_lxc_snapshots: { id: "lxc-1", action: "list" },
+      kmerhosting_lxc_password: { id: "lxc-1", password: "StrongPass123!", confirm: true },
+      kmerhosting_lxc_reinstall: { id: "lxc-1", distribution: "ubuntu-24.04", confirm: true },
+      kmerhosting_lxc_terminal_ticket: { id: "lxc-1", confirm: true },
+      kmerhosting_lxc_auto_renew: { id: "lxc-1", enabled: true },
+      kmerhosting_lxc_billing_period: { id: "lxc-1", billingMonths: 3, confirm: true },
       kmerhosting_kvm_list: {},
       kmerhosting_kvm_get: { id: "vps-1" },
       kmerhosting_kvm_action: { serviceId: "vps-1", action: "restart" },

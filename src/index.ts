@@ -7,7 +7,6 @@ import {
   KmerHostingError,
   type ApiEnvelope,
   type KvmAction,
-  type MutationOptions,
 } from "@kmerhosting/sdk";
 import * as z from "zod/v4";
 
@@ -31,6 +30,7 @@ export const MCP_TOOL_NAMES = [
   "kmerhosting_hosting_stats",
   "kmerhosting_hosting_panel_access",
   "kmerhosting_lxc_list", "kmerhosting_lxc_get", "kmerhosting_lxc_metrics", "kmerhosting_lxc_action", "kmerhosting_lxc_snapshots",
+  "kmerhosting_lxc_password", "kmerhosting_lxc_reinstall", "kmerhosting_lxc_terminal_ticket", "kmerhosting_lxc_auto_renew", "kmerhosting_lxc_billing_period",
   "kmerhosting_kvm_list", "kmerhosting_kvm_get", "kmerhosting_kvm_action", "kmerhosting_kvm_auto_renew",
   "kmerhosting_kvm_password", "kmerhosting_kvm_renew", "kmerhosting_kvm_cancel", "kmerhosting_kvm_keep_service",
   "kmerhosting_kvm_snapshots_list", "kmerhosting_kvm_snapshot_create", "kmerhosting_kvm_snapshot_update", "kmerhosting_kvm_snapshot_delete",
@@ -38,8 +38,6 @@ export const MCP_TOOL_NAMES = [
 ] as const;
 
 // Keep OAuth discovery aligned with the operations exposed by this server.
-// LXC currently has read-only list/get tools; mutating LXC scopes must not be
-// advertised until those operations are implemented and permission-checked.
 export const MCP_SUPPORTED_SCOPES = [
   "account:read",
   "account:usage:read",
@@ -54,6 +52,10 @@ export const MCP_SUPPORTED_SCOPES = [
   "lxc:read",
   "lxc:power:write",
   "lxc:snapshots:write",
+  "lxc:credentials:write",
+  "lxc:reinstall",
+  "lxc:terminal:access",
+  "lxc:subscription:write",
   "kvm:read",
   "kvm:power:write",
   "kvm:snapshots:write",
@@ -76,41 +78,6 @@ function clientFromEnvironment(accessToken?: string): KmerHostingClient {
     apiKey,
     baseUrl: process.env.KMERHOSTING_API_URL,
   });
-  // Keep the MCP binary compatible with SDK 0.2.x installations while the
-  // coordinated SDK release containing account.apiUsage is rolled out.
-  const account = client.account as { apiUsage?: () => Promise<ApiEnvelope> };
-  if (!account.apiUsage) {
-    const baseUrl = (process.env.KMERHOSTING_API_URL || "https://api.kmerhosting.com").replace(/\/+$/, "");
-    account.apiUsage = async () => {
-      const response = await fetch(`${baseUrl}/v1/account/api-usage`, { headers: { Accept: "application/json", Authorization: `Bearer ${apiKey}` } });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.error?.message || "Unable to load API activity.");
-      return payload as ApiEnvelope;
-    };
-  }
-  const lxc = client.lxc as typeof client.lxc & {
-    metrics?: (id: string) => Promise<ApiEnvelope>;
-    action?: (id: string, action: string, options?: MutationOptions) => Promise<ApiEnvelope>;
-    snapshots?: { list: (id: string) => Promise<ApiEnvelope>; mutate: (id: string, action: string, name: string, options?: MutationOptions) => Promise<ApiEnvelope> };
-  };
-  const legacyRequest = async (path: string, method = "GET", body?: unknown): Promise<ApiEnvelope> => {
-    const baseUrl = (process.env.KMERHOSTING_API_URL || "https://api.kmerhosting.com").replace(/\/+$/, "");
-    const headers: Record<string, string> = { Accept: "application/json", Authorization: `Bearer ${apiKey}` };
-    if (body !== undefined) headers["Content-Type"] = "application/json";
-    const response = await fetch(`${baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload?.error?.message || "Unable to complete the LXC request.");
-    return payload as ApiEnvelope;
-  };
-  if (!lxc.metrics) lxc.metrics = (id) => legacyRequest(`/v1/lxc/instances/${encodeURIComponent(id)}/metrics`);
-  if (!lxc.action) lxc.action = (id, action, options) => legacyRequest(`/v1/lxc/instances/${encodeURIComponent(id)}/actions`, "POST", { action, ...(options?.idempotencyKey ? {} : {}) });
-  if (!lxc.snapshots) lxc.snapshots = { list: (id) => legacyRequest(`/v1/lxc/instances/${encodeURIComponent(id)}/snapshots`), mutate: (id, action, name) => legacyRequest(`/v1/lxc/instances/${encodeURIComponent(id)}/snapshots`, "POST", { action, name }) };
-  const kvm = client.kvm as typeof client.kvm & { resetPassword?: (id: string, password: string, options?: MutationOptions) => Promise<ApiEnvelope>; renew?: (id: string, months?: 1 | 3 | 6 | 12, options?: MutationOptions) => Promise<ApiEnvelope>; cancel?: (id: string, options?: MutationOptions) => Promise<ApiEnvelope>; keepService?: (id: string, options?: MutationOptions) => Promise<ApiEnvelope>; snapshots: typeof client.kvm.snapshots & { rollback?: (id: string, snapshotId: string, options?: MutationOptions) => Promise<ApiEnvelope> } };
-  if (!kvm.resetPassword) kvm.resetPassword = (id, password) => legacyRequest(`/v1/kvm/instances/${encodeURIComponent(id)}/password`, "POST", { password });
-  if (!kvm.renew) kvm.renew = (id, months) => legacyRequest(`/v1/kvm/instances/${encodeURIComponent(id)}/renew`, "POST", months ? { billingMonths: months } : {});
-  if (!kvm.cancel) kvm.cancel = (id) => legacyRequest(`/v1/kvm/instances/${encodeURIComponent(id)}/cancel`, "POST", {});
-  if (!kvm.keepService) kvm.keepService = (id) => legacyRequest(`/v1/kvm/instances/${encodeURIComponent(id)}/keep-service`, "POST", {});
-  if (!kvm.snapshots.rollback) kvm.snapshots.rollback = (id, snapshotId) => legacyRequest(`/v1/kvm/instances/${encodeURIComponent(id)}/snapshots/rollback`, "POST", { snapshotId });
   return client;
 }
 
@@ -150,7 +117,7 @@ async function execute(work: () => Promise<ApiEnvelope>) {
 }
 
 export function createServer(api = clientFromEnvironment()): McpServer {
-  const server = new McpServer({ name: "kmerhosting", version: "0.2.0" });
+  const server = new McpServer({ name: "kmerhosting", version: "0.3.0" });
 
   server.registerTool("kmerhosting_account_get", {
     description: "Get the authenticated KmerHosting account.",
@@ -160,11 +127,7 @@ export function createServer(api = clientFromEnvironment()): McpServer {
   server.registerTool("kmerhosting_account_api_usage", {
     description: "List API request activity, including non-product operations and client IPv4 addresses.",
     inputSchema: z.object({}),
-  }, () => execute(() => {
-    const apiUsage = (api.account as { apiUsage?: () => Promise<ApiEnvelope> }).apiUsage;
-    if (!apiUsage) throw new Error("Install the latest KmerHosting SDK before using API activity.");
-    return apiUsage();
-  }));
+  }, () => execute(() => api.account.apiUsage()));
 
   server.registerTool("kmerhosting_services_list", {
     description: "List all KmerHosting services owned by the authenticated account.",
@@ -285,33 +248,53 @@ export function createServer(api = clientFromEnvironment()): McpServer {
   server.registerTool("kmerhosting_lxc_metrics", {
     description: "Get metrics for an owned LXC instance for the last 24 hours.",
     inputSchema: idInput("LXC instance UUID"),
-  }, ({ id }) => execute(() => {
-    const method = (api.lxc as typeof api.lxc & { metrics?: (id: string) => Promise<ApiEnvelope> }).metrics;
-    if (!method) throw new Error("Install the latest KmerHosting SDK before using LXC metrics.");
-    return method(id);
-  }));
+  }, ({ id }) => execute(() => api.lxc.metrics(id)));
 
   server.registerTool("kmerhosting_lxc_action", {
     description: "Control an owned LXC instance. This can interrupt services and requires explicit confirmation for stop.",
     inputSchema: z.object({ id: z.string().min(1), action: z.enum(["start", "restart", "freeze", "stop"]), confirm: z.literal(true).optional(), ...mutationFields }),
   }, ({ id, action, confirm, idempotencyKey }) => execute(() => {
     if (["stop", "freeze"].includes(action) && confirm !== true) throw new Error("Set confirm=true to run this disruptive LXC action.");
-    const method = (api.lxc as typeof api.lxc & { action?: (id: string, action: "start" | "restart" | "freeze" | "stop", options?: MutationOptions) => Promise<ApiEnvelope> }).action;
-    if (!method) throw new Error("Install the latest KmerHosting SDK before using LXC actions.");
-    return method(id, action, { idempotencyKey });
+    return api.lxc.action(id, action, { idempotencyKey });
   }));
 
   server.registerTool("kmerhosting_lxc_snapshots", {
     description: "List or mutate an owned LXC snapshot. Delete and restore require confirm=true.",
     inputSchema: z.object({ id: z.string().min(1), action: z.enum(["list", "create", "delete", "restore"]), name: z.string().min(1).max(48).optional(), confirm: z.literal(true).optional(), ...mutationFields }),
   }, ({ id, action, name, confirm, idempotencyKey }) => execute(() => {
-    const snapshots = (api.lxc as typeof api.lxc & { snapshots?: { list: (id: string) => Promise<ApiEnvelope>; mutate: (id: string, action: "create" | "delete" | "restore", name: string, options?: MutationOptions) => Promise<ApiEnvelope> } }).snapshots;
-    if (!snapshots) throw new Error("Install the latest KmerHosting SDK before using LXC snapshots.");
-    if (action === "list") return snapshots.list(id);
+    if (action === "list") return api.lxc.snapshots.list(id);
     if (!name) throw new Error("A snapshot name is required.");
     if (["delete", "restore"].includes(action) && confirm !== true) throw new Error("Set confirm=true for snapshot deletion or restoration.");
-    return snapshots.mutate(id, action, name, { idempotencyKey });
+    return api.lxc.snapshots.mutate(id, action, name, { idempotencyKey });
   }));
+
+  server.registerTool("kmerhosting_lxc_password", {
+    description: "Change an LXC root password. Requires confirm=true and an API key restricted to the current IPv4.",
+    inputSchema: z.object({ id: z.string().min(1), password: z.string().min(10).max(128), confirm: z.literal(true), ...mutationFields }),
+  }, ({ id, password, idempotencyKey }) => execute(() => api.lxc.changePassword(id, password, { idempotencyKey })));
+
+  server.registerTool("kmerhosting_lxc_reinstall", {
+    description: "Erase and reinstall an LXC instance. This destroys its data and requires confirm=true.",
+    inputSchema: z.object({ id: z.string().min(1), distribution: z.string().min(1).max(80), confirm: z.literal(true), ...mutationFields }),
+  }, ({ id, distribution, idempotencyKey }) => execute(() => api.lxc.reinstall(id, distribution, { idempotencyKey })));
+
+  server.registerTool("kmerhosting_lxc_terminal_ticket", {
+    description: "Create a 60-second LXC terminal ticket. Requires confirm=true and returns a short-lived secret.",
+    inputSchema: z.object({ id: z.string().min(1), confirm: z.literal(true), ...mutationFields }),
+  }, ({ id, idempotencyKey }) => execute(() => api.lxc.createTerminalTicket(id, { idempotencyKey })));
+
+  server.registerTool("kmerhosting_lxc_auto_renew", {
+    description: "Enable or disable LXC auto-renew. Disabling schedules cancellation and requires confirm=true.",
+    inputSchema: z.object({ id: z.string().min(1), enabled: z.boolean(), confirm: z.literal(true).optional(), ...mutationFields }),
+  }, ({ id, enabled, confirm, idempotencyKey }) => execute(() => {
+    if (!enabled && confirm !== true) throw new Error("Set confirm=true to disable LXC auto-renew and schedule cancellation.");
+    return api.lxc.setAutoRenew(id, enabled, { idempotencyKey });
+  }));
+
+  server.registerTool("kmerhosting_lxc_billing_period", {
+    description: "Change the LXC billing period. Requires confirm=true because it changes the subscription.",
+    inputSchema: z.object({ id: z.string().min(1), billingMonths: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12)]), confirm: z.literal(true), ...mutationFields }),
+  }, ({ id, billingMonths, idempotencyKey }) => execute(() => api.lxc.setBillingPeriod(id, billingMonths, { idempotencyKey })));
 
   server.registerTool("kmerhosting_kvm_list", {
     description: "List owned KmerHosting KVM instances.",
@@ -347,7 +330,7 @@ export function createServer(api = clientFromEnvironment()): McpServer {
     }),
   }, ({ serviceId, enabled, idempotencyKey }) => execute(() => api.kvm.setAutoRenew(serviceId, enabled, { idempotencyKey })));
 
-  const kvmOps = api.kvm as typeof api.kvm & { resetPassword: (id: string, password: string, options?: MutationOptions) => Promise<ApiEnvelope>; renew: (id: string, months?: 1 | 3 | 6 | 12, options?: MutationOptions) => Promise<ApiEnvelope>; cancel: (id: string, options?: MutationOptions) => Promise<ApiEnvelope>; keepService: (id: string, options?: MutationOptions) => Promise<ApiEnvelope>; snapshots: typeof api.kvm.snapshots & { rollback: (id: string, snapshotId: string, options?: MutationOptions) => Promise<ApiEnvelope> } };
+  const kvmOps = api.kvm;
 
   server.registerTool("kmerhosting_kvm_password", {
     description: "Reset a KVM root password. Requires explicit confirmation.",

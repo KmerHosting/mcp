@@ -60,7 +60,7 @@ Keep stdout reserved for MCP protocol messages in stdio mode; diagnostics are wr
 
 ## Tools
 
-The server exposes account details and API activity (including operation routes and source IPv4s), service, domain/DNS, email hosting, shared hosting, read-only LXC, and KVM management tools. Mutations accept an optional `idempotencyKey`. DNS deletion, KVM snapshot deletion, and KVM stop/shutdown require explicit `confirm: true`.
+The server exposes account details and API activity (including operation routes and source IPv4s), service, domain/DNS, email hosting, shared hosting, complete public LXC management, and KVM management tools. Mutations accept an optional `idempotencyKey`. Destructive, credential, terminal and subscription-changing tools require explicit confirmation; dangerous API scopes are additionally restricted by the key's IPv4 allowlist.
 
 ## Security
 

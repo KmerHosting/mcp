@@ -5,7 +5,7 @@
     "": {
       "name": "@kmerhosting/mcp",
       "dependencies": {
-        "@kmerhosting/sdk": "^0.2.0",
+        "@kmerhosting/sdk": "^0.3.0",
         "@modelcontextprotocol/server": "^2.0.0",
         "zod": "^4.5.4",
       },
@@ -16,7 +16,7 @@
     },
   },
   "packages": {
-    "@kmerhosting/sdk": ["@kmerhosting/sdk@0.2.0", "", {}, "sha512-82D91tQtOL7vLUv7kqst1NBtz9O1F7Y6uPSkTDqq4EQdPDw4jvwa6mNumUMEW5fzj4dm9gytiawPWHuPiLicnQ=="],
+    "@kmerhosting/sdk": ["@kmerhosting/sdk@0.3.0", "", {}, "sha512-Yh23Xtit9ufhA8RWweNunu9JeVA1xSEoCCujS88mqupP1qyi8cdo54Q34OxNKkHitsMJqplOsr876M9VS+CcRA=="],
 
     "@modelcontextprotocol/core": ["@modelcontextprotocol/core@2.0.0", "", { "dependencies": { "zod": "^4.2.0" } }, "sha512-pJCEwGG7Lfr/+PQp9ZTwKXNeO5wzbfKL7H3MYpCorM4oFBoQrdjnBgEoqG+RjhsvS1FKrDbKux+M1HhlnGWqcA=="],
 
