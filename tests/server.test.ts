@@ -106,14 +106,14 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
       kmerhosting_hosting_services_list: {},
       kmerhosting_hosting_stats: { serviceId: "hosting-1" },
       kmerhosting_hosting_panel_access: { serviceId: "hosting-1", target: "panel" },
-      kmerhosting_vps_list: {},
-      kmerhosting_vps_get: { id: "vps-1" },
-      kmerhosting_vps_action: { serviceId: "vps-1", action: "restart" },
-      kmerhosting_vps_auto_renew: { serviceId: "vps-1", enabled: true },
-      kmerhosting_vps_snapshots_list: { serviceId: "vps-1" },
-      kmerhosting_vps_snapshot_create: { serviceId: "vps-1", name: "test" },
-      kmerhosting_vps_snapshot_update: { serviceId: "vps-1", snapshotId: "snapshot-1", name: "renamed" },
-      kmerhosting_vps_snapshot_delete: { serviceId: "vps-1", snapshotId: "snapshot-1", confirm: true },
+      kmerhosting_kvm_list: {},
+      kmerhosting_kvm_get: { id: "vps-1" },
+      kmerhosting_kvm_action: { serviceId: "vps-1", action: "restart" },
+      kmerhosting_kvm_auto_renew: { serviceId: "vps-1", enabled: true },
+      kmerhosting_kvm_snapshots_list: { serviceId: "vps-1" },
+      kmerhosting_kvm_snapshot_create: { serviceId: "vps-1", name: "test" },
+      kmerhosting_kvm_snapshot_update: { serviceId: "vps-1", snapshotId: "snapshot-1", name: "renamed" },
+      kmerhosting_kvm_snapshot_delete: { serviceId: "vps-1", snapshotId: "snapshot-1", confirm: true },
     };
     for (const [index, name] of MCP_TOOL_NAMES.entries()) {
       const result = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 10 + index, method: "tools/call", params: { name, arguments: toolArguments[name] } }));
@@ -127,7 +127,7 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
 
     apiErrorMode = false;
     const apiCallsBeforeDestructive = apiCalls.length;
-    const destructive = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "kmerhosting_vps_action", arguments: { serviceId: "instance-1", action: "stop" } } }));
+    const destructive = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "kmerhosting_kvm_action", arguments: { serviceId: "instance-1", action: "stop" } } }));
     expect(destructive.result.isError ?? destructive.error).toBeTruthy();
     expect(apiCalls).toHaveLength(apiCallsBeforeDestructive);
   } finally {
