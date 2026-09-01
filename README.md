@@ -6,7 +6,7 @@ It lets MCP-compatible AI clients inspect and manage the authenticated KmerHosti
 
 ## Install
 
-The package is not published on the npm registry yet. Install the official GitHub repository instead; the `prepare` step builds the executable automatically:
+Install the official GitHub repository; the `prepare` step builds the executable automatically:
 
 ```bash
 bun add -g github:KmerHosting/mcp
