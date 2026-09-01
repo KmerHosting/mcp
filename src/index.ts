@@ -57,6 +57,7 @@ export const MCP_SUPPORTED_SCOPES = [
   "lxc:terminal:access",
   "lxc:subscription:write",
   "kvm:read",
+  "kvm:credentials:write",
   "kvm:power:write",
   "kvm:snapshots:write",
   "kvm:subscription:write",
@@ -117,7 +118,7 @@ async function execute(work: () => Promise<ApiEnvelope>) {
 }
 
 export function createServer(api = clientFromEnvironment()): McpServer {
-  const server = new McpServer({ name: "kmerhosting", version: "0.3.1" });
+  const server = new McpServer({ name: "kmerhosting", version: "0.3.2" });
 
   server.registerTool("kmerhosting_account_get", {
     description: "Get the authenticated KmerHosting account.",

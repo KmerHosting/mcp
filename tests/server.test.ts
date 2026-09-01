@@ -70,6 +70,7 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
     expect(protectedResourceBody.scopes_supported).toEqual([...MCP_SUPPORTED_SCOPES]);
     expect(protectedResourceBody.scopes_supported).toContain("lxc:reinstall");
     expect(protectedResourceBody.scopes_supported).toContain("lxc:terminal:access");
+    expect(protectedResourceBody.scopes_supported).toContain("kvm:credentials:write");
 
     const unauthenticated = await handler(new Request("https://mcp.example.test/mcp", { method: "POST", body: "{}" }));
     expect(unauthenticated.status).toBe(401);
@@ -81,7 +82,7 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
       method: "initialize",
       params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "contract-test", version: "1.0.0" } },
     }));
-    expect(initialize.result.serverInfo).toMatchObject({ name: "kmerhosting", version: "0.3.1" });
+    expect(initialize.result.serverInfo).toMatchObject({ name: "kmerhosting", version: "0.3.2" });
 
     const listed = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }));
     expect(listed.result.tools).toHaveLength(41);
