@@ -117,7 +117,7 @@ async function execute(work: () => Promise<ApiEnvelope>) {
 }
 
 export function createServer(api = clientFromEnvironment()): McpServer {
-  const server = new McpServer({ name: "kmerhosting", version: "0.3.0" });
+  const server = new McpServer({ name: "kmerhosting", version: "0.3.1" });
 
   server.registerTool("kmerhosting_account_get", {
     description: "Get the authenticated KmerHosting account.",

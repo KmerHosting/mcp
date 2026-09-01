@@ -24,3 +24,5 @@ jobs:
       - run: bun test
       - run: bun run typecheck
       - run: bun run build
+      - name: Verify the GitHub-installed executable is current
+        run: git diff --exit-code -- dist/index.js dist/index.d.ts

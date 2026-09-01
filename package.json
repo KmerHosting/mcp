@@ -1,6 +1,6 @@
 {
   "name": "@kmerhosting/mcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Official Model Context Protocol server for the KmerHosting API.",
   "license": "Apache-2.0",
   "type": "module",

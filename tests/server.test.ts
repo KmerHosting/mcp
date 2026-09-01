@@ -81,7 +81,7 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
       method: "initialize",
       params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "contract-test", version: "1.0.0" } },
     }));
-    expect(initialize.result.serverInfo).toMatchObject({ name: "kmerhosting", version: "0.3.0" });
+    expect(initialize.result.serverInfo).toMatchObject({ name: "kmerhosting", version: "0.3.1" });
 
     const listed = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }));
     expect(listed.result.tools).toHaveLength(41);

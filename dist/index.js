@@ -1,0 +1,465 @@
+#!/usr/bin/env node
+import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { KmerHostingClient, KmerHostingError, } from "@kmerhosting/sdk";
+import * as z from "zod/v4";
+export const MCP_TOOL_NAMES = [
+    "kmerhosting_account_get",
+    "kmerhosting_account_api_usage",
+    "kmerhosting_services_list",
+    "kmerhosting_service_get",
+    "kmerhosting_domains_list",
+    "kmerhosting_domain_get",
+    "kmerhosting_domain_dns_list",
+    "kmerhosting_domain_dns_create",
+    "kmerhosting_domain_dns_update",
+    "kmerhosting_domain_dns_delete",
+    "kmerhosting_domain_auto_renew",
+    "kmerhosting_domain_nameservers",
+    "kmerhosting_email_services_list",
+    "kmerhosting_email_provision",
+    "kmerhosting_email_dns_sync",
+    "kmerhosting_hosting_services_list",
+    "kmerhosting_hosting_stats",
+    "kmerhosting_hosting_panel_access",
+    "kmerhosting_lxc_list", "kmerhosting_lxc_get", "kmerhosting_lxc_metrics", "kmerhosting_lxc_action", "kmerhosting_lxc_snapshots",
+    "kmerhosting_lxc_password", "kmerhosting_lxc_reinstall", "kmerhosting_lxc_terminal_ticket", "kmerhosting_lxc_auto_renew", "kmerhosting_lxc_billing_period",
+    "kmerhosting_kvm_list", "kmerhosting_kvm_get", "kmerhosting_kvm_action", "kmerhosting_kvm_auto_renew",
+    "kmerhosting_kvm_password", "kmerhosting_kvm_renew", "kmerhosting_kvm_cancel", "kmerhosting_kvm_keep_service",
+    "kmerhosting_kvm_snapshots_list", "kmerhosting_kvm_snapshot_create", "kmerhosting_kvm_snapshot_update", "kmerhosting_kvm_snapshot_delete",
+    "kmerhosting_kvm_snapshot_rollback",
+];
+// Keep OAuth discovery aligned with the operations exposed by this server.
+export const MCP_SUPPORTED_SCOPES = [
+    "account:read",
+    "account:usage:read",
+    "services:read",
+    "domains:read",
+    "domains:write",
+    "domains:dns:write",
+    "email:read",
+    "email:write",
+    "hosting:read",
+    "hosting:panel:access",
+    "lxc:read",
+    "lxc:power:write",
+    "lxc:snapshots:write",
+    "lxc:credentials:write",
+    "lxc:reinstall",
+    "lxc:terminal:access",
+    "lxc:subscription:write",
+    "kvm:read",
+    "kvm:power:write",
+    "kvm:snapshots:write",
+    "kvm:subscription:write",
+    "offline_access",
+];
+const mutationFields = {
+    idempotencyKey: z.string().min(8).max(128).optional().describe("Stable key to safely retry the same mutation"),
+};
+const idInput = (label) => z.object({
+    id: z.string().min(1).describe(label),
+});
+function clientFromEnvironment(accessToken) {
+    const apiKey = accessToken || process.env.KMERHOSTING_API_KEY;
+    if (!apiKey)
+        throw new Error("KMERHOSTING_API_KEY is required.");
+    const client = new KmerHostingClient({
+        apiKey,
+        baseUrl: process.env.KMERHOSTING_API_URL,
+    });
+    return client;
+}
+function resultText(result) {
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+}
+function errorText(error) {
+    if (error instanceof KmerHostingError) {
+        return {
+            isError: true,
+            content: [{
+                    type: "text",
+                    text: JSON.stringify({
+                        error: {
+                            code: error.code,
+                            status: error.status,
+                            message: error.message,
+                            ...(error.requestId ? { request_id: error.requestId } : {}),
+                        },
+                    }, null, 2),
+                }],
+        };
+    }
+    return {
+        isError: true,
+        content: [{ type: "text", text: JSON.stringify({ error: { code: "mcp_error", message: error instanceof Error ? error.message : String(error) } }, null, 2) }],
+    };
+}
+async function execute(work) {
+    try {
+        return resultText(await work());
+    }
+    catch (error) {
+        return errorText(error);
+    }
+}
+export function createServer(api = clientFromEnvironment()) {
+    const server = new McpServer({ name: "kmerhosting", version: "0.3.1" });
+    server.registerTool("kmerhosting_account_get", {
+        description: "Get the authenticated KmerHosting account.",
+        inputSchema: z.object({}),
+    }, () => execute(() => api.account.get()));
+    server.registerTool("kmerhosting_account_api_usage", {
+        description: "List API request activity, including non-product operations and client IPv4 addresses.",
+        inputSchema: z.object({}),
+    }, () => execute(() => api.account.apiUsage()));
+    server.registerTool("kmerhosting_services_list", {
+        description: "List all KmerHosting services owned by the authenticated account.",
+        inputSchema: z.object({}),
+    }, () => execute(() => api.services.list()));
+    server.registerTool("kmerhosting_service_get", {
+        description: "Get details for one KmerHosting service.",
+        inputSchema: idInput("Service UUID"),
+    }, ({ id }) => execute(() => api.services.get(id)));
+    server.registerTool("kmerhosting_domains_list", {
+        description: "List domains owned by the authenticated KmerHosting account.",
+        inputSchema: z.object({}),
+    }, () => execute(() => api.domains.list()));
+    server.registerTool("kmerhosting_domain_get", {
+        description: "Get details for one owned domain.",
+        inputSchema: idInput("Domain UUID"),
+    }, ({ id }) => execute(() => api.domains.get(id)));
+    server.registerTool("kmerhosting_domain_dns_list", {
+        description: "List DNS records for an owned domain.",
+        inputSchema: z.object({ domainId: z.string().min(1).describe("Domain UUID") }),
+    }, ({ domainId }) => execute(() => api.domains.dns.list(domainId)));
+    server.registerTool("kmerhosting_domain_dns_create", {
+        description: "Create a DNS record on an owned domain. The API validates the record.",
+        inputSchema: z.object({
+            domainId: z.string().min(1).describe("Domain UUID"),
+            record: z.record(z.string(), z.unknown()).describe("DNS record object"),
+            ...mutationFields,
+        }),
+    }, ({ domainId, record, idempotencyKey }) => execute(() => api.domains.dns.create(domainId, record, { idempotencyKey })));
+    server.registerTool("kmerhosting_domain_dns_update", {
+        description: "Update a DNS record on an owned domain. The API validates the record.",
+        inputSchema: z.object({
+            domainId: z.string().min(1).describe("Domain UUID"),
+            recordId: z.string().min(1).describe("DNS record UUID"),
+            record: z.record(z.string(), z.unknown()).describe("DNS record object"),
+            ...mutationFields,
+        }),
+    }, ({ domainId, recordId, record, idempotencyKey }) => execute(() => api.domains.dns.update(domainId, recordId, record, { idempotencyKey })));
+    server.registerTool("kmerhosting_domain_dns_delete", {
+        description: "Delete a DNS record. Requires confirm=true because this is destructive.",
+        inputSchema: z.object({
+            domainId: z.string().min(1).describe("Domain UUID"),
+            recordId: z.string().min(1).describe("DNS record UUID"),
+            confirm: z.literal(true).describe("Explicit confirmation of DNS record deletion"),
+            ...mutationFields,
+        }),
+    }, ({ domainId, recordId, idempotencyKey }) => execute(() => api.domains.dns.delete(domainId, recordId, { idempotencyKey })));
+    server.registerTool("kmerhosting_domain_auto_renew", {
+        description: "Enable or disable automatic renewal for an owned domain.",
+        inputSchema: z.object({
+            domainId: z.string().min(1).describe("Domain UUID"),
+            enabled: z.boolean(),
+            ...mutationFields,
+        }),
+    }, ({ domainId, enabled, idempotencyKey }) => execute(() => api.domains.setAutoRenew(domainId, enabled, { idempotencyKey })));
+    server.registerTool("kmerhosting_domain_nameservers", {
+        description: "Replace the nameservers for an owned domain.",
+        inputSchema: z.object({
+            domainId: z.string().min(1).describe("Domain UUID"),
+            nameservers: z.array(z.string().min(1)).min(1).describe("Nameservers to apply"),
+            ...mutationFields,
+        }),
+    }, ({ domainId, nameservers, idempotencyKey }) => execute(() => api.domains.setNameservers(domainId, nameservers, { idempotencyKey })));
+    server.registerTool("kmerhosting_email_services_list", {
+        description: "List owned KmerHosting email hosting services.",
+        inputSchema: z.object({}),
+    }, () => execute(() => api.email.listServices()));
+    server.registerTool("kmerhosting_email_provision", {
+        description: "Provision an owned email hosting service.",
+        inputSchema: z.object({ serviceId: z.string().min(1).describe("Email service UUID"), ...mutationFields }),
+    }, ({ serviceId, idempotencyKey }) => execute(() => api.email.provision(serviceId, { idempotencyKey })));
+    server.registerTool("kmerhosting_email_dns_sync", {
+        description: "Synchronize DNS for an owned email hosting service.",
+        inputSchema: z.object({ serviceId: z.string().min(1).describe("Email service UUID"), ...mutationFields }),
+    }, ({ serviceId, idempotencyKey }) => execute(() => api.email.syncDns(serviceId, { idempotencyKey })));
+    server.registerTool("kmerhosting_hosting_services_list", {
+        description: "List owned KmerHosting shared-hosting services.",
+        inputSchema: z.object({}),
+    }, () => execute(() => api.hosting.listServices()));
+    server.registerTool("kmerhosting_hosting_stats", {
+        description: "Get statistics for an owned shared-hosting service.",
+        inputSchema: z.object({ serviceId: z.string().min(1).describe("Hosting service UUID") }),
+    }, ({ serviceId }) => execute(() => api.hosting.stats(serviceId)));
+    server.registerTool("kmerhosting_hosting_panel_access", {
+        description: "Create a short-lived access link for an owned hosting panel or file manager.",
+        inputSchema: z.object({
+            serviceId: z.string().min(1).describe("Hosting service UUID"),
+            target: z.enum(["panel", "filemanager"]).default("panel"),
+            ...mutationFields,
+        }),
+    }, ({ serviceId, target, idempotencyKey }) => execute(() => api.hosting.createPanelAccess(serviceId, target, { idempotencyKey })));
+    server.registerTool("kmerhosting_lxc_list", {
+        description: "List LXC instances owned by the authenticated KmerHosting account.",
+        inputSchema: z.object({}),
+    }, () => execute(() => api.lxc.list()));
+    server.registerTool("kmerhosting_lxc_get", {
+        description: "Get details for one owned LXC instance.",
+        inputSchema: idInput("LXC instance UUID"),
+    }, ({ id }) => execute(() => api.lxc.get(id)));
+    server.registerTool("kmerhosting_lxc_metrics", {
+        description: "Get metrics for an owned LXC instance for the last 24 hours.",
+        inputSchema: idInput("LXC instance UUID"),
+    }, ({ id }) => execute(() => api.lxc.metrics(id)));
+    server.registerTool("kmerhosting_lxc_action", {
+        description: "Control an owned LXC instance. This can interrupt services and requires explicit confirmation for stop.",
+        inputSchema: z.object({ id: z.string().min(1), action: z.enum(["start", "restart", "freeze", "stop"]), confirm: z.literal(true).optional(), ...mutationFields }),
+    }, ({ id, action, confirm, idempotencyKey }) => execute(() => {
+        if (["stop", "freeze"].includes(action) && confirm !== true)
+            throw new Error("Set confirm=true to run this disruptive LXC action.");
+        return api.lxc.action(id, action, { idempotencyKey });
+    }));
+    server.registerTool("kmerhosting_lxc_snapshots", {
+        description: "List or mutate an owned LXC snapshot. Delete and restore require confirm=true.",
+        inputSchema: z.object({ id: z.string().min(1), action: z.enum(["list", "create", "delete", "restore"]), name: z.string().min(1).max(48).optional(), confirm: z.literal(true).optional(), ...mutationFields }),
+    }, ({ id, action, name, confirm, idempotencyKey }) => execute(() => {
+        if (action === "list")
+            return api.lxc.snapshots.list(id);
+        if (!name)
+            throw new Error("A snapshot name is required.");
+        if (["delete", "restore"].includes(action) && confirm !== true)
+            throw new Error("Set confirm=true for snapshot deletion or restoration.");
+        return api.lxc.snapshots.mutate(id, action, name, { idempotencyKey });
+    }));
+    server.registerTool("kmerhosting_lxc_password", {
+        description: "Change an LXC root password. Requires confirm=true and an API key restricted to the current IPv4.",
+        inputSchema: z.object({ id: z.string().min(1), password: z.string().min(10).max(128), confirm: z.literal(true), ...mutationFields }),
+    }, ({ id, password, idempotencyKey }) => execute(() => api.lxc.changePassword(id, password, { idempotencyKey })));
+    server.registerTool("kmerhosting_lxc_reinstall", {
+        description: "Erase and reinstall an LXC instance. This destroys its data and requires confirm=true.",
+        inputSchema: z.object({ id: z.string().min(1), distribution: z.string().min(1).max(80), confirm: z.literal(true), ...mutationFields }),
+    }, ({ id, distribution, idempotencyKey }) => execute(() => api.lxc.reinstall(id, distribution, { idempotencyKey })));
+    server.registerTool("kmerhosting_lxc_terminal_ticket", {
+        description: "Create a 60-second LXC terminal ticket. Requires confirm=true and returns a short-lived secret.",
+        inputSchema: z.object({ id: z.string().min(1), confirm: z.literal(true), ...mutationFields }),
+    }, ({ id, idempotencyKey }) => execute(() => api.lxc.createTerminalTicket(id, { idempotencyKey })));
+    server.registerTool("kmerhosting_lxc_auto_renew", {
+        description: "Enable or disable LXC auto-renew. Disabling schedules cancellation and requires confirm=true.",
+        inputSchema: z.object({ id: z.string().min(1), enabled: z.boolean(), confirm: z.literal(true).optional(), ...mutationFields }),
+    }, ({ id, enabled, confirm, idempotencyKey }) => execute(() => {
+        if (!enabled && confirm !== true)
+            throw new Error("Set confirm=true to disable LXC auto-renew and schedule cancellation.");
+        return api.lxc.setAutoRenew(id, enabled, { idempotencyKey });
+    }));
+    server.registerTool("kmerhosting_lxc_billing_period", {
+        description: "Change the LXC billing period. Requires confirm=true because it changes the subscription.",
+        inputSchema: z.object({ id: z.string().min(1), billingMonths: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12)]), confirm: z.literal(true), ...mutationFields }),
+    }, ({ id, billingMonths, idempotencyKey }) => execute(() => api.lxc.setBillingPeriod(id, billingMonths, { idempotencyKey })));
+    server.registerTool("kmerhosting_kvm_list", {
+        description: "List owned KmerHosting KVM instances.",
+        inputSchema: z.object({}),
+    }, () => execute(() => api.kvm.list()));
+    server.registerTool("kmerhosting_kvm_get", {
+        description: "Get details for one owned KVM instance.",
+        inputSchema: idInput("KVM instance UUID"),
+    }, ({ id }) => execute(() => api.kvm.get(id)));
+    server.registerTool("kmerhosting_kvm_action", {
+        description: "Start, restart, stop, or shut down an owned KVM instance. stop and shutdown require confirm=true.",
+        inputSchema: z.object({
+            serviceId: z.string().min(1).describe("VPS instance UUID"),
+            action: z.enum(["start", "stop", "shutdown", "restart"]),
+            confirm: z.boolean().optional().describe("Required for stop or shutdown"),
+            ...mutationFields,
+        }),
+    }, ({ serviceId, action, confirm, idempotencyKey }) => execute(() => {
+        if ((action === "stop" || action === "shutdown") && confirm !== true) {
+            throw new Error(`${action} requires confirm=true.`);
+        }
+        return api.kvm.action(serviceId, action, { idempotencyKey });
+    }));
+    server.registerTool("kmerhosting_kvm_auto_renew", {
+        description: "Enable or disable automatic renewal for an owned KVM instance.",
+        inputSchema: z.object({
+            serviceId: z.string().min(1).describe("VPS instance UUID"),
+            enabled: z.boolean(),
+            ...mutationFields,
+        }),
+    }, ({ serviceId, enabled, idempotencyKey }) => execute(() => api.kvm.setAutoRenew(serviceId, enabled, { idempotencyKey })));
+    const kvmOps = api.kvm;
+    server.registerTool("kmerhosting_kvm_password", {
+        description: "Reset a KVM root password. Requires explicit confirmation.",
+        inputSchema: z.object({ serviceId: z.string().min(1), password: z.string().min(8), confirm: z.literal(true), ...mutationFields }),
+    }, ({ serviceId, password, idempotencyKey }) => execute(() => kvmOps.resetPassword(serviceId, password, { idempotencyKey })));
+    server.registerTool("kmerhosting_kvm_renew", {
+        description: "Renew a KVM service for 1, 3, 6, or 12 months.",
+        inputSchema: z.object({ serviceId: z.string().min(1), billingMonths: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12)]).optional(), ...mutationFields }),
+    }, ({ serviceId, billingMonths, idempotencyKey }) => execute(() => kvmOps.renew(serviceId, billingMonths, { idempotencyKey })));
+    server.registerTool("kmerhosting_kvm_cancel", {
+        description: "Schedule KVM cancellation. Requires explicit confirmation.",
+        inputSchema: z.object({ serviceId: z.string().min(1), confirm: z.literal(true), ...mutationFields }),
+    }, ({ serviceId, idempotencyKey }) => execute(() => kvmOps.cancel(serviceId, { idempotencyKey })));
+    server.registerTool("kmerhosting_kvm_keep_service", {
+        description: "Revoke a scheduled KVM cancellation.",
+        inputSchema: z.object({ serviceId: z.string().min(1), ...mutationFields }),
+    }, ({ serviceId, idempotencyKey }) => execute(() => kvmOps.keepService(serviceId, { idempotencyKey })));
+    server.registerTool("kmerhosting_kvm_snapshots_list", {
+        description: "List snapshots for an owned KVM instance.",
+        inputSchema: z.object({ serviceId: z.string().min(1).describe("VPS instance UUID") }),
+    }, ({ serviceId }) => execute(() => api.kvm.snapshots.list(serviceId)));
+    server.registerTool("kmerhosting_kvm_snapshot_create", {
+        description: "Create a snapshot for an owned KVM instance.",
+        inputSchema: z.object({
+            serviceId: z.string().min(1).describe("VPS instance UUID"),
+            name: z.string().min(1).max(160),
+            description: z.string().max(1000).optional(),
+            ...mutationFields,
+        }),
+    }, ({ serviceId, name, description, idempotencyKey }) => execute(() => api.kvm.snapshots.create(serviceId, { name, description }, { idempotencyKey })));
+    server.registerTool("kmerhosting_kvm_snapshot_update", {
+        description: "Update the name or description of an owned KVM snapshot.",
+        inputSchema: z.object({
+            serviceId: z.string().min(1).describe("VPS instance UUID"),
+            snapshotId: z.string().min(1).describe("Snapshot ID"),
+            name: z.string().min(1).max(160).optional(),
+            description: z.string().max(1000).optional(),
+            ...mutationFields,
+        }),
+    }, ({ serviceId, snapshotId, name, description, idempotencyKey }) => execute(() => api.kvm.snapshots.update(serviceId, snapshotId, { name, description }, { idempotencyKey })));
+    server.registerTool("kmerhosting_kvm_snapshot_delete", {
+        description: "Delete a KVM snapshot. Requires confirm=true because this is destructive.",
+        inputSchema: z.object({
+            serviceId: z.string().min(1).describe("VPS instance UUID"),
+            snapshotId: z.string().min(1).describe("Snapshot ID"),
+            confirm: z.literal(true).describe("Explicit confirmation of snapshot deletion"),
+            ...mutationFields,
+        }),
+    }, ({ serviceId, snapshotId, idempotencyKey }) => execute(() => api.kvm.snapshots.delete(serviceId, snapshotId, { idempotencyKey })));
+    server.registerTool("kmerhosting_kvm_snapshot_rollback", {
+        description: "Restore a KVM snapshot. Requires explicit confirmation.",
+        inputSchema: z.object({ serviceId: z.string().min(1), snapshotId: z.string().min(1), confirm: z.literal(true), ...mutationFields }),
+    }, ({ serviceId, snapshotId, idempotencyKey }) => execute(() => kvmOps.snapshots.rollback(serviceId, snapshotId, { idempotencyKey })));
+    return server;
+}
+export async function startServer() {
+    const port = Number(process.env.MCP_HTTP_PORT || 0);
+    if (port > 0) {
+        await startHttpServer(port);
+        return;
+    }
+    serveStdio(() => createServer(), { onerror: (error) => console.error(`MCP transport error: ${error.message}`) });
+    console.error("KmerHosting MCP server running on stdio");
+}
+const publicMcpUrl = () => (process.env.MCP_PUBLIC_URL || "https://mcp.kmerhosting.com").replace(/\/+$/, "");
+const oauthBackendUrl = () => (process.env.KMERHOSTING_OAUTH_BACKEND_URL || "").replace(/\/+$/, "");
+function bearerToken(request) {
+    return request.headers.get("authorization")?.match(/^Bearer\s+(kh_(?:live|oauth)_[A-Za-z0-9_-]+)$/i)?.[1] || null;
+}
+function oauthChallenge() {
+    return `Bearer resource_metadata="${publicMcpUrl()}/.well-known/oauth-protected-resource"`;
+}
+function jsonResponse(body, status = 200, extra = {}) {
+    return new Response(JSON.stringify(body), {
+        status,
+        headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store",
+            ...extra,
+        },
+    });
+}
+async function proxyOAuth(request, path) {
+    const backend = oauthBackendUrl();
+    if (!backend)
+        return jsonResponse({ error: "server_configuration_error", message: "OAuth backend is not configured." }, 503);
+    const backendPath = path.replace(/^\/oauth(?=\/|$)/, "");
+    const response = await fetch(`${oauthBackendUrl()}${backendPath}`, {
+        method: request.method,
+        headers: {
+            "Content-Type": request.headers.get("content-type") || "application/json",
+            Accept: "application/json",
+        },
+        body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer(),
+    });
+    const headers = new Headers(response.headers);
+    // Bun transparently decodes compressed upstream bodies; do not forward
+    // encoding/length metadata that would describe the compressed payload.
+    headers.delete("Content-Encoding");
+    headers.delete("Content-Length");
+    headers.delete("Transfer-Encoding");
+    headers.set("Cache-Control", "no-store");
+    headers.set("Access-Control-Allow-Origin", "*");
+    headers.set("Access-Control-Allow-Headers", "content-type");
+    return new Response(response.body, { status: response.status, headers });
+}
+async function oauthTokenActive(token) {
+    const backend = oauthBackendUrl();
+    if (!backend)
+        return false;
+    try {
+        const response = await fetch(`${backend}/introspect`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+            body: new URLSearchParams({ token }).toString(),
+        });
+        if (!response.ok)
+            return false;
+        const payload = await response.json();
+        return payload.active === true;
+    }
+    catch {
+        return false;
+    }
+}
+export async function startHttpServer(port) {
+    const fetchHandler = createHttpHandler();
+    Bun.serve({
+        hostname: process.env.MCP_HTTP_HOST || "127.0.0.1",
+        port,
+        fetch: fetchHandler,
+    });
+    console.error(`KmerHosting MCP server listening on http://${process.env.MCP_HTTP_HOST || "127.0.0.1"}:${port}/mcp`);
+}
+export function createHttpHandler() {
+    const mcpHandler = createMcpHandler((context) => {
+        const token = context.requestInfo ? bearerToken(context.requestInfo) : null;
+        if (!token)
+            throw new Error("OAuth bearer token is required.");
+        return createServer(clientFromEnvironment(token));
+    }, { legacy: "stateless", onerror: (error) => console.error(`MCP HTTP error: ${error.message}`) });
+    return async (request) => {
+        const url = new URL(request.url);
+        if (request.method === "OPTIONS") {
+            return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Authorization, Content-Type, MCP-Protocol-Version, MCP-Session-Id", "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS", "Access-Control-Expose-Headers": "MCP-Session-Id, WWW-Authenticate" } });
+        }
+        if (url.pathname === "/health")
+            return jsonResponse({ status: "ok", service: "kmerhosting-mcp", transport: "streamable-http" });
+        if (url.pathname === "/.well-known/oauth-protected-resource" || url.pathname === "/.well-known/oauth-protected-resource/mcp") {
+            return jsonResponse({ resource: `${publicMcpUrl()}/mcp`, authorization_servers: [publicMcpUrl()], scopes_supported: [...MCP_SUPPORTED_SCOPES] });
+        }
+        if (url.pathname === "/.well-known/oauth-authorization-server") {
+            return jsonResponse({ issuer: publicMcpUrl(), authorization_endpoint: "https://dashboard.kmerhosting.com/oauth/authorize", token_endpoint: `${publicMcpUrl()}/oauth/token`, registration_endpoint: `${publicMcpUrl()}/oauth/register`, revocation_endpoint: `${publicMcpUrl()}/oauth/revoke`, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"], code_challenge_methods_supported: ["S256"], scopes_supported: [...MCP_SUPPORTED_SCOPES], token_endpoint_auth_methods_supported: ["none"] });
+        }
+        if (["/oauth/register", "/oauth/token", "/oauth/revoke"].includes(url.pathname))
+            return proxyOAuth(request, url.pathname);
+        if (url.pathname !== "/mcp")
+            return jsonResponse({ error: "not_found", message: "Not found." }, 404);
+        const token = bearerToken(request);
+        if (!token)
+            return jsonResponse({ error: "invalid_token", message: "OAuth bearer token required." }, 401, { "WWW-Authenticate": oauthChallenge() });
+        if (token.startsWith("kh_oauth_") && !(await oauthTokenActive(token)))
+            return jsonResponse({ error: "invalid_token", message: "The OAuth access token is invalid, revoked, or expired." }, 401, { "WWW-Authenticate": oauthChallenge() });
+        const response = await mcpHandler.fetch(request);
+        response.headers.set("Access-Control-Expose-Headers", "MCP-Session-Id, WWW-Authenticate");
+        return response;
+    };
+}
+if (import.meta.main) {
+    startServer().catch((error) => {
+        console.error(`KmerHosting MCP server failed: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 1;
+    });
+}

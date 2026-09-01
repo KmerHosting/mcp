@@ -6,7 +6,7 @@ It lets MCP-compatible AI clients inspect and manage the authenticated KmerHosti
 
 ## Install
 
-Install the official GitHub repository; the `prepare` step builds the executable automatically:
+Install the official GitHub repository. The executable is bundled in the repository so Bun does not need to trust or run a package lifecycle script:
 
 ```bash
 bun add -g github:KmerHosting/mcp
