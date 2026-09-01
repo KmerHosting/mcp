@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+exec 9>/run/lock/mcp.kmerhosting.com-deploy.lock
+flock -n 9 || exit 0
+
+cd /opt/mcp.kmerhosting.com
+runuser -u kmermcp -- git fetch --quiet origin main
+current_commit="$(runuser -u kmermcp -- git rev-parse HEAD)"
+target_commit="$(runuser -u kmermcp -- git rev-parse origin/main)"
+if [[ "$current_commit" == "$target_commit" ]]; then
+  exit 0
+fi
+
+runuser -u kmermcp -- git merge --ff-only "$target_commit"
+runuser -u kmermcp -- /usr/local/bin/bun install --frozen-lockfile
+runuser -u kmermcp -- /usr/local/bin/bun test
+runuser -u kmermcp -- /usr/local/bin/bun run typecheck
+runuser -u kmermcp -- /usr/local/bin/bun run build
+systemctl restart mcp.kmerhosting.com.service
+curl --fail --silent --show-error --retry 10 --retry-delay 1 https://mcp.kmerhosting.com/health >/dev/null

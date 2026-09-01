@@ -1,0 +1,7 @@
+[Unit]
+Description=Deploy the latest verified mcp.kmerhosting.com main branch
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/mcp.kmerhosting.com-deploy

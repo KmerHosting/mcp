@@ -1,0 +1,22 @@
+[Unit]
+Description=mcp.kmerhosting.com MCP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kmermcp
+Group=kmermcp
+WorkingDirectory=/opt/mcp.kmerhosting.com
+EnvironmentFile=/etc/mcp.kmerhosting.com.env
+ExecStart=/usr/local/bin/bun run start
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/mcp.kmerhosting.com
+
+[Install]
+WantedBy=multi-user.target
