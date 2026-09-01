@@ -32,7 +32,9 @@ export const MCP_TOOL_NAMES = [
   "kmerhosting_hosting_panel_access",
   "kmerhosting_lxc_list", "kmerhosting_lxc_get", "kmerhosting_lxc_metrics", "kmerhosting_lxc_action", "kmerhosting_lxc_snapshots",
   "kmerhosting_kvm_list", "kmerhosting_kvm_get", "kmerhosting_kvm_action", "kmerhosting_kvm_auto_renew",
+  "kmerhosting_kvm_password", "kmerhosting_kvm_renew", "kmerhosting_kvm_cancel", "kmerhosting_kvm_keep_service",
   "kmerhosting_kvm_snapshots_list", "kmerhosting_kvm_snapshot_create", "kmerhosting_kvm_snapshot_update", "kmerhosting_kvm_snapshot_delete",
+  "kmerhosting_kvm_snapshot_rollback",
 ] as const;
 
 // Keep OAuth discovery aligned with the operations exposed by this server.
@@ -103,6 +105,12 @@ function clientFromEnvironment(accessToken?: string): KmerHostingClient {
   if (!lxc.metrics) lxc.metrics = (id) => legacyRequest(`/v1/lxc/instances/${encodeURIComponent(id)}/metrics`);
   if (!lxc.action) lxc.action = (id, action, options) => legacyRequest(`/v1/lxc/instances/${encodeURIComponent(id)}/actions`, "POST", { action, ...(options?.idempotencyKey ? {} : {}) });
   if (!lxc.snapshots) lxc.snapshots = { list: (id) => legacyRequest(`/v1/lxc/instances/${encodeURIComponent(id)}/snapshots`), mutate: (id, action, name) => legacyRequest(`/v1/lxc/instances/${encodeURIComponent(id)}/snapshots`, "POST", { action, name }) };
+  const kvm = client.kvm as typeof client.kvm & { resetPassword?: (id: string, password: string, options?: MutationOptions) => Promise<ApiEnvelope>; renew?: (id: string, months?: 1 | 3 | 6 | 12, options?: MutationOptions) => Promise<ApiEnvelope>; cancel?: (id: string, options?: MutationOptions) => Promise<ApiEnvelope>; keepService?: (id: string, options?: MutationOptions) => Promise<ApiEnvelope>; snapshots: typeof client.kvm.snapshots & { rollback?: (id: string, snapshotId: string, options?: MutationOptions) => Promise<ApiEnvelope> } };
+  if (!kvm.resetPassword) kvm.resetPassword = (id, password) => legacyRequest(`/v1/kvm/instances/${encodeURIComponent(id)}/password`, "POST", { password });
+  if (!kvm.renew) kvm.renew = (id, months) => legacyRequest(`/v1/kvm/instances/${encodeURIComponent(id)}/renew`, "POST", months ? { billingMonths: months } : {});
+  if (!kvm.cancel) kvm.cancel = (id) => legacyRequest(`/v1/kvm/instances/${encodeURIComponent(id)}/cancel`, "POST", {});
+  if (!kvm.keepService) kvm.keepService = (id) => legacyRequest(`/v1/kvm/instances/${encodeURIComponent(id)}/keep-service`, "POST", {});
+  if (!kvm.snapshots.rollback) kvm.snapshots.rollback = (id, snapshotId) => legacyRequest(`/v1/kvm/instances/${encodeURIComponent(id)}/snapshots/rollback`, "POST", { snapshotId });
   return client;
 }
 
@@ -339,6 +347,28 @@ export function createServer(api = clientFromEnvironment()): McpServer {
     }),
   }, ({ serviceId, enabled, idempotencyKey }) => execute(() => api.kvm.setAutoRenew(serviceId, enabled, { idempotencyKey })));
 
+  const kvmOps = api.kvm as typeof api.kvm & { resetPassword: (id: string, password: string, options?: MutationOptions) => Promise<ApiEnvelope>; renew: (id: string, months?: 1 | 3 | 6 | 12, options?: MutationOptions) => Promise<ApiEnvelope>; cancel: (id: string, options?: MutationOptions) => Promise<ApiEnvelope>; keepService: (id: string, options?: MutationOptions) => Promise<ApiEnvelope>; snapshots: typeof api.kvm.snapshots & { rollback: (id: string, snapshotId: string, options?: MutationOptions) => Promise<ApiEnvelope> } };
+
+  server.registerTool("kmerhosting_kvm_password", {
+    description: "Reset a KVM root password. Requires explicit confirmation.",
+    inputSchema: z.object({ serviceId: z.string().min(1), password: z.string().min(8), confirm: z.literal(true), ...mutationFields }),
+  }, ({ serviceId, password, idempotencyKey }) => execute(() => kvmOps.resetPassword(serviceId, password, { idempotencyKey })));
+
+  server.registerTool("kmerhosting_kvm_renew", {
+    description: "Renew a KVM service for 1, 3, 6, or 12 months.",
+    inputSchema: z.object({ serviceId: z.string().min(1), billingMonths: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12)]).optional(), ...mutationFields }),
+  }, ({ serviceId, billingMonths, idempotencyKey }) => execute(() => kvmOps.renew(serviceId, billingMonths, { idempotencyKey })));
+
+  server.registerTool("kmerhosting_kvm_cancel", {
+    description: "Schedule KVM cancellation. Requires explicit confirmation.",
+    inputSchema: z.object({ serviceId: z.string().min(1), confirm: z.literal(true), ...mutationFields }),
+  }, ({ serviceId, idempotencyKey }) => execute(() => kvmOps.cancel(serviceId, { idempotencyKey })));
+
+  server.registerTool("kmerhosting_kvm_keep_service", {
+    description: "Revoke a scheduled KVM cancellation.",
+    inputSchema: z.object({ serviceId: z.string().min(1), ...mutationFields }),
+  }, ({ serviceId, idempotencyKey }) => execute(() => kvmOps.keepService(serviceId, { idempotencyKey })));
+
   server.registerTool("kmerhosting_kvm_snapshots_list", {
     description: "List snapshots for an owned KVM instance.",
     inputSchema: z.object({ serviceId: z.string().min(1).describe("VPS instance UUID") }),
@@ -374,6 +404,11 @@ export function createServer(api = clientFromEnvironment()): McpServer {
       ...mutationFields,
     }),
   }, ({ serviceId, snapshotId, idempotencyKey }) => execute(() => api.kvm.snapshots.delete(serviceId, snapshotId, { idempotencyKey })));
+
+  server.registerTool("kmerhosting_kvm_snapshot_rollback", {
+    description: "Restore a KVM snapshot. Requires explicit confirmation.",
+    inputSchema: z.object({ serviceId: z.string().min(1), snapshotId: z.string().min(1), confirm: z.literal(true), ...mutationFields }),
+  }, ({ serviceId, snapshotId, idempotencyKey }) => execute(() => kvmOps.snapshots.rollback(serviceId, snapshotId, { idempotencyKey })));
 
   return server;
 }

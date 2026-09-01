@@ -61,7 +61,7 @@ test.skipIf(!enabled)("validates two tenants through API, SDK-backed MCP, and re
 
     const tools = await mcpRequest(token, { jsonrpc: "2.0", id: index + 10, method: "tools/list", params: {} });
     expect(tools.response.status).toBe(200);
-    expect(tools.payload.result.tools).toHaveLength(25);
+    expect(tools.payload.result.tools).toHaveLength(36);
 
     const account = await mcpRequest(token, { jsonrpc: "2.0", id: index + 20, method: "tools/call", params: { name: "kmerhosting_account_get", arguments: {} } });
     expect(account.response.status).toBe(200);

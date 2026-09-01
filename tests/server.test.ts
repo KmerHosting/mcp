@@ -83,7 +83,7 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
     expect(initialize.result.serverInfo).toMatchObject({ name: "kmerhosting", version: "0.2.0" });
 
     const listed = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }));
-    expect(listed.result.tools).toHaveLength(31);
+    expect(listed.result.tools).toHaveLength(36);
     expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toEqual([...MCP_TOOL_NAMES]);
 
     const toolResult = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "kmerhosting_account_get", arguments: {} } }));
@@ -121,10 +121,15 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
       kmerhosting_kvm_get: { id: "vps-1" },
       kmerhosting_kvm_action: { serviceId: "vps-1", action: "restart" },
       kmerhosting_kvm_auto_renew: { serviceId: "vps-1", enabled: true },
+      kmerhosting_kvm_password: { serviceId: "vps-1", password: "StrongPass123!", confirm: true },
+      kmerhosting_kvm_renew: { serviceId: "vps-1", billingMonths: 1 },
+      kmerhosting_kvm_cancel: { serviceId: "vps-1", confirm: true },
+      kmerhosting_kvm_keep_service: { serviceId: "vps-1" },
       kmerhosting_kvm_snapshots_list: { serviceId: "vps-1" },
       kmerhosting_kvm_snapshot_create: { serviceId: "vps-1", name: "test" },
       kmerhosting_kvm_snapshot_update: { serviceId: "vps-1", snapshotId: "snapshot-1", name: "renamed" },
       kmerhosting_kvm_snapshot_delete: { serviceId: "vps-1", snapshotId: "snapshot-1", confirm: true },
+      kmerhosting_kvm_snapshot_rollback: { serviceId: "vps-1", snapshotId: "snapshot-1", confirm: true },
     };
     for (const [index, name] of MCP_TOOL_NAMES.entries()) {
       const result = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 10 + index, method: "tools/call", params: { name, arguments: toolArguments[name] } }));
