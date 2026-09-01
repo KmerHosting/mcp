@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createHttpHandler, MCP_TOOL_NAMES } from "../src/index";
+import { createHttpHandler, MCP_SUPPORTED_SCOPES, MCP_TOOL_NAMES } from "../src/index";
 
 const apiUrl = "https://api.example.test";
 
@@ -55,7 +55,8 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
 
     const protectedResource = await handler(new Request("https://mcp.example.test/.well-known/oauth-protected-resource"));
     expect(protectedResource.status).toBe(200);
-    expect(await protectedResource.json()).toMatchObject({ resource: "https://mcp.example.test/mcp" });
+    const protectedResourceBody = await protectedResource.json() as { resource: string; scopes_supported: string[] };
+    expect(protectedResourceBody).toMatchObject({ resource: "https://mcp.example.test/mcp" });
 
     const authorizationServer = await handler(new Request("https://mcp.example.test/.well-known/oauth-authorization-server"));
     expect(authorizationServer.status).toBe(200);
@@ -63,7 +64,11 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
       issuer: "https://mcp.example.test",
       code_challenge_methods_supported: ["S256"],
       grant_types_supported: ["authorization_code", "refresh_token"],
+      scopes_supported: [...MCP_SUPPORTED_SCOPES],
     });
+
+    expect(protectedResourceBody.scopes_supported).toEqual([...MCP_SUPPORTED_SCOPES]);
+    expect(protectedResourceBody.scopes_supported).not.toContain("lxc:reinstall");
 
     const unauthenticated = await handler(new Request("https://mcp.example.test/mcp", { method: "POST", body: "{}" }));
     expect(unauthenticated.status).toBe(401);
@@ -78,7 +83,7 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
     expect(initialize.result.serverInfo).toMatchObject({ name: "kmerhosting", version: "0.2.0" });
 
     const listed = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }));
-    expect(listed.result.tools).toHaveLength(25);
+    expect(listed.result.tools).toHaveLength(27);
     expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toEqual([...MCP_TOOL_NAMES]);
 
     const toolResult = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "kmerhosting_account_get", arguments: {} } }));
@@ -106,6 +111,8 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
       kmerhosting_hosting_services_list: {},
       kmerhosting_hosting_stats: { serviceId: "hosting-1" },
       kmerhosting_hosting_panel_access: { serviceId: "hosting-1", target: "panel" },
+      kmerhosting_lxc_list: {},
+      kmerhosting_lxc_get: { id: "lxc-1" },
       kmerhosting_kvm_list: {},
       kmerhosting_kvm_get: { id: "vps-1" },
       kmerhosting_kvm_action: { serviceId: "vps-1", action: "restart" },

@@ -28,8 +28,30 @@ export const MCP_TOOL_NAMES = [
   "kmerhosting_hosting_services_list",
   "kmerhosting_hosting_stats",
   "kmerhosting_hosting_panel_access",
+  "kmerhosting_lxc_list", "kmerhosting_lxc_get",
   "kmerhosting_kvm_list", "kmerhosting_kvm_get", "kmerhosting_kvm_action", "kmerhosting_kvm_auto_renew",
   "kmerhosting_kvm_snapshots_list", "kmerhosting_kvm_snapshot_create", "kmerhosting_kvm_snapshot_update", "kmerhosting_kvm_snapshot_delete",
+] as const;
+
+// Keep OAuth discovery aligned with the operations exposed by this server.
+// LXC currently has read-only list/get tools; mutating LXC scopes must not be
+// advertised until those operations are implemented and permission-checked.
+export const MCP_SUPPORTED_SCOPES = [
+  "account:read",
+  "services:read",
+  "domains:read",
+  "domains:write",
+  "domains:dns:write",
+  "email:read",
+  "email:write",
+  "hosting:read",
+  "hosting:panel:access",
+  "lxc:read",
+  "kvm:read",
+  "kvm:power:write",
+  "kvm:snapshots:write",
+  "kvm:subscription:write",
+  "offline_access",
 ] as const;
 
 const mutationFields = {
@@ -197,6 +219,16 @@ export function createServer(api = clientFromEnvironment()): McpServer {
       ...mutationFields,
     }),
   }, ({ serviceId, target, idempotencyKey }) => execute(() => api.hosting.createPanelAccess(serviceId, target, { idempotencyKey })));
+
+  server.registerTool("kmerhosting_lxc_list", {
+    description: "List LXC instances owned by the authenticated KmerHosting account.",
+    inputSchema: z.object({}),
+  }, () => execute(() => api.lxc.list()));
+
+  server.registerTool("kmerhosting_lxc_get", {
+    description: "Get details for one owned LXC instance.",
+    inputSchema: idInput("LXC instance UUID"),
+  }, ({ id }) => execute(() => api.lxc.get(id)));
 
   server.registerTool("kmerhosting_kvm_list", {
     description: "List owned KmerHosting KVM instances.",
@@ -368,10 +400,10 @@ export function createHttpHandler(): (request: Request) => Promise<Response> {
       }
       if (url.pathname === "/health") return jsonResponse({ status: "ok", service: "kmerhosting-mcp", transport: "streamable-http" });
       if (url.pathname === "/.well-known/oauth-protected-resource" || url.pathname === "/.well-known/oauth-protected-resource/mcp") {
-        return jsonResponse({ resource: `${publicMcpUrl()}/mcp`, authorization_servers: [publicMcpUrl()], scopes_supported: ["account:read", "services:read", "domains:read", "domains:write", "domains:dns:write", "email:read", "email:write", "hosting:read", "hosting:panel:access", "lxc:read", "lxc:power:write", "lxc:snapshots:write", "lxc:credentials:write", "lxc:reinstall", "lxc:terminal:access", "kvm:read", "kvm:power:write", "kvm:snapshots:write", "kvm:subscription:write", "offline_access"] });
+        return jsonResponse({ resource: `${publicMcpUrl()}/mcp`, authorization_servers: [publicMcpUrl()], scopes_supported: [...MCP_SUPPORTED_SCOPES] });
       }
       if (url.pathname === "/.well-known/oauth-authorization-server") {
-        return jsonResponse({ issuer: publicMcpUrl(), authorization_endpoint: "https://dashboard.kmerhosting.com/oauth/authorize", token_endpoint: `${publicMcpUrl()}/oauth/token`, registration_endpoint: `${publicMcpUrl()}/oauth/register`, revocation_endpoint: `${publicMcpUrl()}/oauth/revoke`, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"], code_challenge_methods_supported: ["S256"], scopes_supported: ["account:read", "services:read", "domains:read", "domains:write", "domains:dns:write", "email:read", "email:write", "hosting:read", "hosting:panel:access", "lxc:read", "lxc:power:write", "lxc:snapshots:write", "lxc:credentials:write", "lxc:reinstall", "lxc:terminal:access", "kvm:read", "kvm:power:write", "kvm:snapshots:write", "kvm:subscription:write", "offline_access"], token_endpoint_auth_methods_supported: ["none"] });
+        return jsonResponse({ issuer: publicMcpUrl(), authorization_endpoint: "https://dashboard.kmerhosting.com/oauth/authorize", token_endpoint: `${publicMcpUrl()}/oauth/token`, registration_endpoint: `${publicMcpUrl()}/oauth/register`, revocation_endpoint: `${publicMcpUrl()}/oauth/revoke`, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"], code_challenge_methods_supported: ["S256"], scopes_supported: [...MCP_SUPPORTED_SCOPES], token_endpoint_auth_methods_supported: ["none"] });
       }
       if (["/oauth/register", "/oauth/token", "/oauth/revoke"].includes(url.pathname)) return proxyOAuth(request, url.pathname);
       if (url.pathname !== "/mcp") return jsonResponse({ error: "not_found", message: "Not found." }, 404);

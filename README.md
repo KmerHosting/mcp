@@ -56,7 +56,7 @@ Keep stdout reserved for MCP protocol messages in stdio mode; diagnostics are wr
 
 ## Tools
 
-The server exposes account, service, domain/DNS, email hosting, shared hosting and LXC VPS tools. Mutations accept an optional `idempotencyKey`. DNS deletion, snapshot deletion and VPS stop/shutdown require explicit `confirm: true`.
+The server exposes account, service, domain/DNS, email hosting, shared hosting, read-only LXC, and KVM management tools. Mutations accept an optional `idempotencyKey`. DNS deletion, KVM snapshot deletion, and KVM stop/shutdown require explicit `confirm: true`.
 
 ## Security
 
