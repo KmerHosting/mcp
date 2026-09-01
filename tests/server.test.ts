@@ -83,7 +83,7 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
     expect(initialize.result.serverInfo).toMatchObject({ name: "kmerhosting", version: "0.2.0" });
 
     const listed = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }));
-    expect(listed.result.tools).toHaveLength(27);
+    expect(listed.result.tools).toHaveLength(28);
     expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toEqual([...MCP_TOOL_NAMES]);
 
     const toolResult = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "kmerhosting_account_get", arguments: {} } }));

@@ -6,9 +6,13 @@ It lets MCP-compatible AI clients inspect and manage the authenticated KmerHosti
 
 ## Install
 
+The package is not published on the npm registry yet. Install the official GitHub repository instead; the `prepare` step builds the executable automatically:
+
 ```bash
-bun add -g @kmerhosting/mcp
+bun add -g github:KmerHosting/mcp
 ```
+
+The installed executable is `kmerhosting-mcp`.
 
 Set the API key in the MCP client's environment:
 
@@ -24,7 +28,7 @@ export KMERHOSTING_API_URL='https://api.kmerhosting.com'
 
 ## MCP client configuration
 
-After publishing, configure a local MCP client to start the server:
+Configure a local MCP client to start the server:
 
 ```json
 {
@@ -56,7 +60,7 @@ Keep stdout reserved for MCP protocol messages in stdio mode; diagnostics are wr
 
 ## Tools
 
-The server exposes account, service, domain/DNS, email hosting, shared hosting, read-only LXC, and KVM management tools. Mutations accept an optional `idempotencyKey`. DNS deletion, KVM snapshot deletion, and KVM stop/shutdown require explicit `confirm: true`.
+The server exposes account details and API activity (including operation routes and source IPv4s), service, domain/DNS, email hosting, shared hosting, read-only LXC, and KVM management tools. Mutations accept an optional `idempotencyKey`. DNS deletion, KVM snapshot deletion, and KVM stop/shutdown require explicit `confirm: true`.
 
 ## Security
 

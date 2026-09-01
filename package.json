@@ -20,6 +20,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "prepare": "npm run build",
     "start": "bun dist/index.js"
   },
   "dependencies": {

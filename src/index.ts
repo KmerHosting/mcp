@@ -12,6 +12,7 @@ import * as z from "zod/v4";
 
 export const MCP_TOOL_NAMES = [
   "kmerhosting_account_get",
+  "kmerhosting_account_api_usage",
   "kmerhosting_services_list",
   "kmerhosting_service_get",
   "kmerhosting_domains_list",
@@ -38,6 +39,7 @@ export const MCP_TOOL_NAMES = [
 // advertised until those operations are implemented and permission-checked.
 export const MCP_SUPPORTED_SCOPES = [
   "account:read",
+  "account:usage:read",
   "services:read",
   "domains:read",
   "domains:write",
@@ -65,10 +67,23 @@ const idInput = (label: string) => z.object({
 function clientFromEnvironment(accessToken?: string): KmerHostingClient {
   const apiKey = accessToken || process.env.KMERHOSTING_API_KEY;
   if (!apiKey) throw new Error("KMERHOSTING_API_KEY is required.");
-  return new KmerHostingClient({
+  const client = new KmerHostingClient({
     apiKey,
     baseUrl: process.env.KMERHOSTING_API_URL,
   });
+  // Keep the MCP binary compatible with SDK 0.2.x installations while the
+  // coordinated SDK release containing account.apiUsage is rolled out.
+  const account = client.account as { apiUsage?: () => Promise<ApiEnvelope> };
+  if (!account.apiUsage) {
+    const baseUrl = (process.env.KMERHOSTING_API_URL || "https://api.kmerhosting.com").replace(/\/+$/, "");
+    account.apiUsage = async () => {
+      const response = await fetch(`${baseUrl}/v1/account/api-usage`, { headers: { Accept: "application/json", Authorization: `Bearer ${apiKey}` } });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error?.message || "Unable to load API activity.");
+      return payload as ApiEnvelope;
+    };
+  }
+  return client;
 }
 
 function resultText(result: ApiEnvelope): { content: [{ type: "text"; text: string }] } {
@@ -113,6 +128,15 @@ export function createServer(api = clientFromEnvironment()): McpServer {
     description: "Get the authenticated KmerHosting account.",
     inputSchema: z.object({}),
   }, () => execute(() => api.account.get()));
+
+  server.registerTool("kmerhosting_account_api_usage", {
+    description: "List API request activity, including non-product operations and client IPv4 addresses.",
+    inputSchema: z.object({}),
+  }, () => execute(() => {
+    const apiUsage = (api.account as { apiUsage?: () => Promise<ApiEnvelope> }).apiUsage;
+    if (!apiUsage) throw new Error("Install the latest KmerHosting SDK before using API activity.");
+    return apiUsage();
+  }));
 
   server.registerTool("kmerhosting_services_list", {
     description: "List all KmerHosting services owned by the authenticated account.",
