@@ -4,31 +4,40 @@ Official Model Context Protocol server for the KmerHosting API.
 
 It lets MCP-compatible AI clients inspect and manage the authenticated KmerHosting account through the official TypeScript SDK.
 
-## Install
+## Choose a connection method
+
+| Method | Best for | Authentication |
+| --- | --- | --- |
+| Hosted OAuth | MCP clients with OAuth 2.1 support | Sign in to your KmerHosting account; no shared API key |
+| Local stdio | Local clients, development and controlled automation | A scoped KmerHosting API key stored in the client environment |
+
+## Method 1 — Hosted OAuth
+
+Connect an OAuth 2.1-compatible MCP client to:
+
+```text
+https://mcp.kmerhosting.com/mcp
+```
+
+The server publishes OAuth discovery and Dynamic Client Registration metadata. Your client redirects you to `https://dashboard.kmerhosting.com/oauth/authorize` for PKCE consent. Sign in, select only the scopes the client needs, and approve the request. Hosted clients do **not** need a shared `KMERHOSTING_API_KEY`.
+
+Use this method when the client supports hosted MCP servers and OAuth. Request `offline_access` only when the client genuinely needs refresh access.
+
+## Method 2 — Local stdio
 
 Install the official GitHub repository. The executable is bundled in the repository so Bun does not need to trust or run a package lifecycle script:
 
 ```bash
-bun add -g github:KmerHosting/mcp
+bun add --global github:KmerHosting/mcp
 ```
 
-The installed executable is `kmerhosting-mcp`.
-
-Set the API key in the MCP client's environment:
+The installed executable is `kmerhosting-mcp`. Put a scoped API key in the MCP client's protected environment, never in its configuration file or source control:
 
 ```bash
 export KMERHOSTING_API_KEY='kh_live_...'
 ```
 
-Optional API URL override for staging:
-
-```bash
-export KMERHOSTING_API_URL='https://api.kmerhosting.com'
-```
-
-## MCP client configuration
-
-Configure a local MCP client to start the server:
+Configure the local MCP client to start the server:
 
 ```json
 {
@@ -43,11 +52,17 @@ Configure a local MCP client to start the server:
 }
 ```
 
-The server uses stdio by default. For the hosted deployment, set `MCP_HTTP_PORT` to serve Streamable HTTP at `/mcp`; each request uses its user-scoped OAuth bearer token.
+Optional API URL override for staging:
 
-Hosted MCP endpoint: `https://mcp.kmerhosting.com/mcp`. It publishes OAuth 2.1 discovery and Dynamic Client Registration, then sends users to `https://dashboard.kmerhosting.com/oauth/authorize` for PKCE consent. No shared API key is required for hosted users.
+```bash
+export KMERHOSTING_API_URL='https://api.kmerhosting.com'
+```
 
-HTTP environment variables:
+Keep stdout reserved for MCP protocol messages in stdio mode; diagnostics are written to stderr.
+
+## Hosted deployment (operators)
+
+The server uses stdio by default. Set these variables only when operating a Streamable HTTP deployment at `/mcp`:
 
 ```bash
 MCP_HTTP_PORT=8791
@@ -55,8 +70,6 @@ MCP_HTTP_HOST=127.0.0.1
 MCP_PUBLIC_URL=https://mcp.kmerhosting.com
 KMERHOSTING_OAUTH_BACKEND_URL=https://YOUR_PROJECT.supabase.co/functions/v1/dashboard-mcp-oauth
 ```
-
-Keep stdout reserved for MCP protocol messages in stdio mode; diagnostics are written to stderr.
 
 ## Tools
 
