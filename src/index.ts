@@ -228,7 +228,7 @@ export function createServer(api = clientFromEnvironment()): McpServer {
   }, ({ serviceId }) => execute(() => api.hosting.stats(serviceId)));
 
   server.registerTool("kmerhosting_hosting_panel_access", {
-    description: "Create a short-lived access link for an owned hosting panel or file manager.",
+    description: "Create a short-lived access link for an owned hosting panel or file manager. For Free Hosting, successful access records activity and can automatically recover an inactivity-suspended service before its deletion deadline.",
     inputSchema: z.object({
       serviceId: z.string().min(1).describe("Hosting service UUID"),
       target: z.enum(["panel", "filemanager"]).default("panel"),
