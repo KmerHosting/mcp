@@ -2,12 +2,14 @@
 
 The remote integration test is intentionally skipped unless
 `RUN_KMERHOSTING_INTEGRATION=1` is set. The GitHub Actions workflow enables it
-with dedicated credentials for two different KmerHosting users.
+with dedicated API keys for two different KmerHosting test users.
 
 Required repository secrets:
 
-- `KH_TEST_TOKEN_A` and `KH_TEST_TOKEN_B`: user-scoped OAuth access tokens for
-  two separate test tenants.
+- `KH_TEST_TOKEN_A` and `KH_TEST_TOKEN_B`: dedicated `kh_live_` API keys for
+  two separate test tenants. Give them only `account:read` and `services:read`.
+  Do not store OAuth access tokens here: hosted OAuth access tokens expire after
+  one hour, so a static GitHub secret cannot support the scheduled daily test.
 - `KH_TEST_SERVICE_ID_A` and `KH_TEST_SERVICE_ID_B`: optional UUIDs of one
   service owned by each tenant. When set, the test verifies cross-tenant reads
   return `service_not_found`.

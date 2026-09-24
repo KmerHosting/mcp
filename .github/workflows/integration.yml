@@ -38,11 +38,16 @@ jobs:
         with:
           bun-version: "1.4.0"
       - run: bun install --frozen-lockfile
-      - name: Require dedicated tenant credentials
+      - name: Require dedicated tenant API keys
         shell: bash
         run: |
+          set -Eeuo pipefail
           test -n "$KH_TEST_TOKEN_A"
           test -n "$KH_TEST_TOKEN_B"
           test "$KH_TEST_TOKEN_A" != "$KH_TEST_TOKEN_B"
+          if [[ "$KH_TEST_TOKEN_A" != kh_live_* || "$KH_TEST_TOKEN_B" != kh_live_* ]]; then
+            echo "KH_TEST_TOKEN_A and KH_TEST_TOKEN_B must be dedicated kh_live_ API keys, not short-lived OAuth access tokens."
+            exit 1
+          fi
       - name: Run remote tenant-isolation contract
         run: bun test tests/integration.test.ts
