@@ -497,7 +497,7 @@ export function createHttpHandler(): (request: Request) => Promise<Response> {
         return jsonResponse({ resource: `${publicMcpUrl()}/mcp`, authorization_servers: [publicMcpUrl()], scopes_supported: [...MCP_SUPPORTED_SCOPES] });
       }
       if (url.pathname === "/.well-known/oauth-authorization-server") {
-        return jsonResponse({ issuer: publicMcpUrl(), authorization_endpoint: "https://dashboard.kmerhosting.com/oauth/authorize", token_endpoint: `${publicMcpUrl()}/oauth/token`, registration_endpoint: `${publicMcpUrl()}/oauth/register`, revocation_endpoint: `${publicMcpUrl()}/oauth/revoke`, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"], code_challenge_methods_supported: ["S256"], scopes_supported: [...MCP_SUPPORTED_SCOPES], token_endpoint_auth_methods_supported: ["none"] });
+        return jsonResponse({ issuer: publicMcpUrl(), authorization_endpoint: "https://dash.kmerhosting.com/oauth/authorize", token_endpoint: `${publicMcpUrl()}/oauth/token`, registration_endpoint: `${publicMcpUrl()}/oauth/register`, revocation_endpoint: `${publicMcpUrl()}/oauth/revoke`, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"], code_challenge_methods_supported: ["S256"], scopes_supported: [...MCP_SUPPORTED_SCOPES], token_endpoint_auth_methods_supported: ["none"] });
       }
       if (["/oauth/register", "/oauth/token", "/oauth/revoke"].includes(url.pathname)) return proxyOAuth(request, url.pathname);
       if (url.pathname !== "/mcp") return jsonResponse({ error: "not_found", message: "Not found." }, 404);

@@ -19,7 +19,7 @@ Connect an OAuth 2.1-compatible MCP client to:
 https://mcp.kmerhosting.com/mcp
 ```
 
-The server publishes OAuth discovery and Dynamic Client Registration metadata. Your client redirects you to `https://dashboard.kmerhosting.com/oauth/authorize` for PKCE consent. Sign in, select only the scopes the client needs, and approve the request. Hosted clients do **not** need a shared `KMERHOSTING_API_KEY`.
+The server publishes OAuth discovery and Dynamic Client Registration metadata. Your client redirects you to `https://dash.kmerhosting.com/oauth/authorize` for PKCE consent. Sign in, select only the scopes the client needs, and approve the request. Hosted clients do **not** need a shared `KMERHOSTING_API_KEY`.
 
 Use this method when the client supports hosted MCP servers and OAuth. Request `offline_access` only when the client genuinely needs refresh access.
 
@@ -68,7 +68,7 @@ The server uses stdio by default. Set these variables only when operating a Stre
 MCP_HTTP_PORT=8791
 MCP_HTTP_HOST=127.0.0.1
 MCP_PUBLIC_URL=https://mcp.kmerhosting.com
-KMERHOSTING_OAUTH_BACKEND_URL=https://YOUR_PROJECT.supabase.co/functions/v1/dashboard-mcp-oauth
+KMERHOSTING_OAUTH_BACKEND_URL=https://YOUR_PROJECT.supabase.co/functions/v1/dash-mcp-oauth
 ```
 
 ## Tools

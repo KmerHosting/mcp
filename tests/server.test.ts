@@ -62,6 +62,7 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
     expect(authorizationServer.status).toBe(200);
     expect(await authorizationServer.json()).toMatchObject({
       issuer: "https://mcp.example.test",
+      authorization_endpoint: "https://dash.kmerhosting.com/oauth/authorize",
       code_challenge_methods_supported: ["S256"],
       grant_types_supported: ["authorization_code", "refresh_token"],
       scopes_supported: [...MCP_SUPPORTED_SCOPES],
