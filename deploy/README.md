@@ -4,11 +4,11 @@ Run the database and Edge Function changes before starting the VPS service.
 
 ## Supabase
 
-From the Dash repository, apply the new migration and deploy the OAuth function:
+From the Dashboard repository, apply the new migration and deploy the OAuth function:
 
 ```bash
 supabase db push
-supabase functions deploy dash-mcp-oauth
+supabase functions deploy dashboard-mcp-oauth
 ```
 
 From the API repository, apply `supabase/migrations/0003_oauth_access_tokens.sql` to the same Supabase project. It adds the API-side OAuth usage, rate-limit and idempotency tables.
@@ -39,7 +39,7 @@ sudo systemctl reload nginx
 Set `KMERHOSTING_OAUTH_BACKEND_URL` in `/etc/kmerhosting-mcp.env` to the real Supabase URL:
 
 ```
-https://YOUR_PROJECT.supabase.co/functions/v1/dash-mcp-oauth
+https://YOUR_PROJECT.supabase.co/functions/v1/dashboard-mcp-oauth
 ```
 
 The certificate paths in the Nginx template must exist before `nginx -t`. If the certificate does not already exist, issue it first with your existing ACME method (for example, temporarily stop Nginx and use standalone mode):
@@ -58,4 +58,4 @@ curl -fsS https://mcp.kmerhosting.com/.well-known/oauth-protected-resource
 curl -fsS https://mcp.kmerhosting.com/.well-known/oauth-authorization-server
 ```
 
-The public endpoint must not contain `KMERHOSTING_API_KEY`; every hosted user receives an individual OAuth token after Dash consent.
+The public endpoint must not contain `KMERHOSTING_API_KEY`; every hosted user receives an individual OAuth token after Dashboard consent.

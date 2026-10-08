@@ -68,7 +68,7 @@ The server uses stdio by default. Set these variables only when operating a Stre
 MCP_HTTP_PORT=8791
 MCP_HTTP_HOST=127.0.0.1
 MCP_PUBLIC_URL=https://mcp.kmerhosting.com
-KMERHOSTING_OAUTH_BACKEND_URL=https://YOUR_PROJECT.supabase.co/functions/v1/dash-mcp-oauth
+KMERHOSTING_OAUTH_BACKEND_URL=https://YOUR_PROJECT.supabase.co/functions/v1/dashboard-mcp-oauth
 ```
 
 ## Tools
