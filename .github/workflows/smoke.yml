@@ -1,0 +1,34 @@
+name: Smoke
+
+# Is the MCP server (mcp.kmerhosting.com) up and answering as expected? Light: curl only, under a minute.
+# Runs 4 min after each push to main (the server's auto-deploy timer publishes it), every 6 hours, and on demand. Checks list: .github/smoke-checks.txt
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-smoke
+  cancel-in-progress: true
+
+jobs:
+  live:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+
+      - name: Wait for the server deploy
+        if: github.event_name == 'push'
+        run: sleep 240
+
+      - name: Live checks
+        run: bash .github/scripts/smoke.sh .github/smoke-checks.txt
