@@ -1,0 +1,5 @@
+# MCP server
+GET https://mcp.kmerhosting.com/health 200 "status":"ok"
+GET https://mcp.kmerhosting.com/.well-known/oauth-protected-resource 200
+# The MCP endpoint refuses anonymous calls
+POST https://mcp.kmerhosting.com/mcp 401
