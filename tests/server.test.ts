@@ -35,6 +35,7 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
   const apiCalls: Array<{ url: string; init?: RequestInit }> = [];
 
   process.env.KMERHOSTING_API_URL = apiUrl;
+  process.env.KMERHOSTING_DOMAIN_SEARCH_URL = "https://domain.example.test";
   process.env.KMERHOSTING_OAUTH_BACKEND_URL = "https://oauth.example.test";
   process.env.MCP_PUBLIC_URL = "https://mcp.example.test";
   globalThis.fetch = (async (input, init) => {
@@ -45,6 +46,10 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
         return Response.json({ error: { code: "insufficient_scope", message: "The services:read scope is missing.", request_id: "api-request-1" } }, { status: 403 });
       }
       return Response.json({ data: { email: "user@example.test", services: [] }, request_id: "api-request-1" });
+    }
+    if (url.startsWith("https://domain.example.test/api/domain-search")) {
+      apiCalls.push({ url, init });
+      return Response.json({ results: [{ domainName: "example.com", registrar: { available: true } }] });
     }
     if (url === "https://oauth.example.test/introspect") return Response.json({ active: true });
     throw new Error(`Unexpected network request in MCP test: ${url}`);
@@ -83,10 +88,10 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
       method: "initialize",
       params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "contract-test", version: "1.0.0" } },
     }));
-    expect(initialize.result.serverInfo).toMatchObject({ name: "kmerhosting", version: "0.3.2" });
+    expect(initialize.result.serverInfo).toMatchObject({ name: "kmerhosting", version: "0.4.0" });
 
     const listed = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }));
-    expect(listed.result.tools).toHaveLength(41);
+    expect(listed.result.tools).toHaveLength(42);
     expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toEqual([...MCP_TOOL_NAMES]);
 
     const toolResult = await readMcpResponse(await mcpRequest(handler, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "kmerhosting_account_get", arguments: {} } }));
@@ -103,6 +108,7 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
       kmerhosting_service_get: { id: "service-1" },
       kmerhosting_domains_list: {},
       kmerhosting_domain_get: { id: "domain-1" },
+      kmerhosting_domains_search: { domains: ["example.com"] },
       kmerhosting_domain_dns_list: { domainId: "domain-1" },
       kmerhosting_domain_dns_create: { domainId: "domain-1", record: { type: "A" } },
       kmerhosting_domain_dns_update: { domainId: "domain-1", recordId: "record-1", record: { content: "192.0.2.1" } },
@@ -156,6 +162,7 @@ test("serves OAuth discovery, validates users, exposes all tools, and preserves 
     expect(apiCalls).toHaveLength(apiCallsBeforeDestructive);
   } finally {
     globalThis.fetch = originalFetch;
+    delete process.env.KMERHOSTING_DOMAIN_SEARCH_URL;
     if (previousApiUrl === undefined) delete process.env.KMERHOSTING_API_URL;
     else process.env.KMERHOSTING_API_URL = previousApiUrl;
     if (previousOAuthUrl === undefined) delete process.env.KMERHOSTING_OAUTH_BACKEND_URL;

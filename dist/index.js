@@ -10,6 +10,7 @@ export const MCP_TOOL_NAMES = [
     "kmerhosting_service_get",
     "kmerhosting_domains_list",
     "kmerhosting_domain_get",
+    "kmerhosting_domains_search",
     "kmerhosting_domain_dns_list",
     "kmerhosting_domain_dns_create",
     "kmerhosting_domain_dns_update",
@@ -71,6 +72,26 @@ function clientFromEnvironment(accessToken) {
     });
     return client;
 }
+/** Public domain availability search. Unauthenticated: no credential is sent. */
+async function searchDomains(domains) {
+    const base = (process.env.KMERHOSTING_DOMAIN_SEARCH_URL ?? "https://domain.kmerhosting.com").replace(/\/+$/, "");
+    const query = new URLSearchParams({ domains: domains.map((domain) => domain.trim()).filter(Boolean).join(",") });
+    const response = await fetch(`${base}/api/domain-search?${query}`, { headers: { Accept: "application/json" } });
+    const text = await response.text();
+    let payload;
+    try {
+        payload = text ? JSON.parse(text) : {};
+    }
+    catch {
+        payload = { message: text };
+    }
+    if (!response.ok) {
+        const body = payload;
+        const retryAfter = response.headers.get("Retry-After");
+        throw new KmerHostingError(typeof body.message === "string" ? body.message : `Domain search failed with status ${response.status}.`, response.status, typeof body.error === "string" ? body.error : response.status === 429 ? "search_rate_limited" : "request_failed", undefined, retryAfter ? { ...payload, retry_after_seconds: Number(retryAfter) } : payload);
+    }
+    return payload;
+}
 function resultText(result) {
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
 }
@@ -105,7 +126,7 @@ async function execute(work) {
     }
 }
 export function createServer(api = clientFromEnvironment()) {
-    const server = new McpServer({ name: "kmerhosting", version: "0.3.2" });
+    const server = new McpServer({ name: "kmerhosting", version: "0.4.0" });
     server.registerTool("kmerhosting_account_get", {
         description: "Get the authenticated KmerHosting account.",
         inputSchema: z.object({}),
@@ -130,6 +151,10 @@ export function createServer(api = clientFromEnvironment()) {
         description: "Get details for one owned domain.",
         inputSchema: idInput("Domain UUID"),
     }, ({ id }) => execute(() => api.domains.get(id)));
+    server.registerTool("kmerhosting_domains_search", {
+        description: "Check availability and current price of 1 to 20 domain names. Public, read-only search: it needs no scope and does not register anything. Limited to 20 searches per minute per client IP.",
+        inputSchema: z.object({ domains: z.array(z.string().min(3).max(253)).min(1).max(20).describe("Domain names to check, for example example.com") }),
+    }, ({ domains }) => execute(() => searchDomains(domains)));
     server.registerTool("kmerhosting_domain_dns_list", {
         description: "List DNS records for an owned domain.",
         inputSchema: z.object({ domainId: z.string().min(1).describe("Domain UUID") }),
