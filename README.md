@@ -73,7 +73,7 @@ KMERHOSTING_OAUTH_BACKEND_URL=https://YOUR_PROJECT.supabase.co/functions/v1/dash
 
 ## Tools
 
-The server exposes account details and API activity (including operation routes and source IPv4s), service, domain/DNS, email hosting, shared hosting, complete public LXC management, and KVM management tools. Mutations accept an optional `idempotencyKey`. Destructive, credential, terminal and subscription-changing tools require explicit confirmation; dangerous API scopes are additionally restricted by the key's IPv4 allowlist.
+The server exposes account details and API activity (including operation routes and source IPv4s), service, domain/DNS, email hosting, shared hosting, complete public LXC management, and KVM management tools. `kmerhosting_domains_search` checks availability and price of 1 to 20 domain names through the public search service (no scope needed, 20 searches per minute per IP; override the service with `KMERHOSTING_DOMAIN_SEARCH_URL`). Mutations accept an optional `idempotencyKey`. Destructive, credential, terminal and subscription-changing tools require explicit confirmation; dangerous API scopes are additionally restricted by the key's IPv4 allowlist.
 
 ## Security
 
